@@ -14,6 +14,8 @@ import {
 } from 'discord.js';
 import { startOrResume, applyAction } from '../../database/blackjack.js';
 import { ensureWelcomeBonus } from '../../database/economy.js';
+import { checkAchievements } from '../../database/achievements.js';
+import { announceAchievements } from '../../lib/achievements.js';
 import { handValue } from '../../lib/blackjack.js';
 import { formatCurrency, BLACKJACK } from '../../config.js';
 
@@ -142,6 +144,14 @@ export async function execute(interaction) {
     await interaction.reply({
       embeds: [finishedEmbed(res.game, res.result, res.newBalance)],
     });
+    // The 'blackjack' trigger fires on game RESOLUTION (either path);
+    // hand size rides along for the future five-card-win check.
+    const earned = await checkAchievements(interaction.guildId, interaction.user.id, 'blackjack', {
+      bet: res.game.bet,
+      result: res.result,
+      playerCards: res.game.playerHand.length,
+    });
+    await announceAchievements(interaction, earned);
     return;
   }
 
@@ -182,6 +192,13 @@ export async function handleButton(interaction) {
       embeds: [finishedEmbed(res.game, res.result, res.newBalance)],
       components: [],
     });
+    // Same resolution trigger as the natural-blackjack path in execute.
+    const earned = await checkAchievements(interaction.guildId, interaction.user.id, 'blackjack', {
+      bet: res.game.bet,
+      result: res.result,
+      playerCards: res.game.playerHand.length,
+    });
+    await announceAchievements(interaction, earned);
   } else {
     await interaction.update({
       embeds: [activeEmbed(res.game)],

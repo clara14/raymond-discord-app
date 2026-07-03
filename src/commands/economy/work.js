@@ -12,6 +12,8 @@ import {
 } from '../../database/economy.js';
 import { tryUseCooldown } from '../../database/cooldowns.js';
 import { garnishEarnings } from '../../database/loans.js';
+import { checkAchievements } from '../../database/achievements.js';
+import { announceAchievements } from '../../lib/achievements.js';
 import { WORK, formatCurrency, formatDuration } from '../../config.js';
 
 // Flavor scenarios. {amount} is swapped for the formatted payout at runtime.
@@ -84,4 +86,8 @@ export async function execute(interaction) {
     .setDescription(description);
 
   await interaction.reply({ embeds: [embed] });
+
+  // Fire achievement checks after the payout committed (never before).
+  const earned = await checkAchievements(guildId, user.id, 'work', { amount });
+  await announceAchievements(interaction, earned);
 }

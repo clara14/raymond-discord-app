@@ -7,6 +7,8 @@
 import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
 import { deposit, withdraw, getBankStatus } from '../../database/bank.js';
 import { ensureWelcomeBonus } from '../../database/economy.js';
+import { checkAchievements } from '../../database/achievements.js';
+import { announceAchievements } from '../../lib/achievements.js';
 import { formatCurrency } from '../../config.js';
 
 export const data = new SlashCommandBuilder()
@@ -74,6 +76,14 @@ export async function execute(interaction) {
           `Deposited **${formatCurrency(amount)}**.`),
       ],
     });
+
+    // The 'bank' trigger fires on DEPOSITS only — putting monies away is
+    // the milestone; withdrawing them back out isn't.
+    const earned = await checkAchievements(interaction.guildId, interaction.user.id, 'bank', {
+      amount,
+      banked: r.banked,
+    });
+    await announceAchievements(interaction, earned);
     return;
   }
 

@@ -7,6 +7,8 @@
 import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
 import { claimDaily, ensureWelcomeBonus, getBalance } from '../../database/economy.js';
 import { garnishEarnings } from '../../database/loans.js';
+import { checkAchievements } from '../../database/achievements.js';
+import { announceAchievements } from '../../lib/achievements.js';
 import { formatCurrency } from '../../config.js';
 
 export const data = new SlashCommandBuilder()
@@ -61,4 +63,12 @@ export async function execute(interaction) {
     .setDescription(description);
 
   await interaction.reply({ embeds: [embed] });
+
+  // Achievements fire AFTER the claim committed and the reply went out —
+  // they can never break or roll back the money.
+  const earned = await checkAchievements(interaction.guildId, interaction.user.id, 'daily', {
+    reward: result.reward,
+    streak: result.streak,
+  });
+  await announceAchievements(interaction, earned);
 }

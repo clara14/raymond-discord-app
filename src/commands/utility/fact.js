@@ -17,6 +17,8 @@ import {
   MAX_FACTS_PER_USER,
   MAX_FACT_LENGTH,
 } from '../../database/userFacts.js';
+import { checkAchievements } from '../../database/achievements.js';
+import { announceAchievements } from '../../lib/achievements.js';
 
 export const data = new SlashCommandBuilder()
   .setName('fact')
@@ -86,6 +88,13 @@ async function handleAdd(interaction) {
   await interaction.reply(
     `🧠 Noted (fact #${result.id}): **${target.username}** — "${fact}"\nThe bot will remember this in chat.`,
   );
+
+  // Achievement check for the TEACHER (facts-about-you checks for the
+  // subject come with the phase 2 catalog).
+  const earned = await checkAchievements(interaction.guildId, interaction.user.id, 'fact', {
+    about: target.id,
+  });
+  await announceAchievements(interaction, earned);
 }
 
 // --- /fact list ---

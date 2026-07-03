@@ -17,6 +17,8 @@ import {
   getLink,
 } from '../../database/linkedAccounts.js';
 import { syncPlayerHistory } from '../../database/lolHistory.js';
+import { checkAchievements } from '../../database/achievements.js';
+import { announceAchievements } from '../../lib/achievements.js';
 import { LOL } from '../../config.js';
 
 export const data = new SlashCommandBuilder()
@@ -100,6 +102,13 @@ async function handleSet(interaction) {
     // the poller's next sync picks the games up instead.
     syncPlayerHistory(account.puuid, interaction.user.id, LOL.backfillCount)
       .catch((err) => console.error('Backfill error:', err.message));
+
+    // Achievement check after the link stored. (In a DM guildId is null
+    // and checkAchievements no-ops — awards are per-guild.)
+    const earned = await checkAchievements(interaction.guildId, interaction.user.id, 'link', {
+      riotId: `${account.gameName}#${account.tagLine}`,
+    });
+    await announceAchievements(interaction, earned);
   } catch (err) {
     // The puuid UNIQUE constraint fires if another Discord user already
     // claimed this Riot account.

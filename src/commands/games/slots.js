@@ -7,6 +7,8 @@
 import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
 import { resolveWager, ensureWelcomeBonus } from '../../database/economy.js';
 import { spinReels, evaluateSpin, payout } from '../../lib/slots.js';
+import { checkAchievements } from '../../database/achievements.js';
+import { announceAchievements } from '../../lib/achievements.js';
 import { formatCurrency } from '../../config.js';
 
 export const data = new SlashCommandBuilder()
@@ -71,4 +73,14 @@ export async function execute(interaction) {
     .setDescription(`${display}\n\n${outcome}\nNew balance: ${formatCurrency(result.newBalance)}`);
 
   await interaction.reply({ embeds: [embed] });
+
+  // Achievement checks run after the spin committed. The reels ride
+  // along — that's how the jackpot check will read triple sevens.
+  const earned = await checkAchievements(interaction.guildId, interaction.user.id, 'slots', {
+    bet,
+    reels: result.reels,
+    multiplier: result.multiplier,
+    net: result.net,
+  });
+  await announceAchievements(interaction, earned);
 }

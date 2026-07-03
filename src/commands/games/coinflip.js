@@ -6,6 +6,8 @@
 
 import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
 import { resolveCoinflip, ensureWelcomeBonus } from '../../database/economy.js';
+import { checkAchievements } from '../../database/achievements.js';
+import { announceAchievements } from '../../lib/achievements.js';
 import { formatCurrency } from '../../config.js';
 
 export const data = new SlashCommandBuilder()
@@ -65,4 +67,13 @@ export async function execute(interaction) {
     .setDescription(`${outcome}\nNew balance: ${formatCurrency(result.newBalance)}`);
 
   await interaction.reply({ embeds: [embed] });
+
+  // Achievement checks run after the wager resolved and committed.
+  const earned = await checkAchievements(interaction.guildId, interaction.user.id, 'coinflip', {
+    bet,
+    guess,
+    result: result.result,
+    won: result.won,
+  });
+  await announceAchievements(interaction, earned);
 }

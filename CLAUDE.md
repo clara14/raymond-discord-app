@@ -56,6 +56,12 @@ sessions in Claude chat; this file transfers that accumulated knowledge.
 - `src/lib/` — pure logic, one concern per file, all unit-testable:
   blackjack, slots, wordle, ledgerHash, riot (API client), anthropic
   (Messages API + tool-use loop), chatTools, wordle guess dict in src/data/.
+- Achievements (spec: docs/ACHIEVEMENTS_SPEC.md): catalog in
+  `src/data/achievements.js` (defs + check functions; contract-tested),
+  runner/award/reads in `src/database/achievements.js`, announce embed in
+  `src/lib/achievements.js`. checkAchievements is called AFTER a success
+  commits — never inside a money transaction — and never throws. Every
+  new feature ships with 2–3 achievements in the same PR.
 
 ## Money & ledger invariants (sacred)
 
@@ -95,12 +101,16 @@ sessions in Claude chat; this file transfers that accumulated knowledge.
 - The AI chat's tools resolve usernames via a per-conversation nameMap;
   chat_messages.user_id exists for this.
 
-## Current state (25 commands)
+## Current state (26 commands)
 
 economy: audit (mod-gated), balance, bank, bribe, daily, gift, leaderboard,
 loan, pay, profile, raffle, rob, work · games: blackjack, coinflip, slots,
 wordle · lol: history, link, lolchannel, lolstats · moderation: warn ·
-utility: fact, ping, poll
+utility: achievements, fact, ping, poll
+
+Achievements: phase 1 shipped (framework + getting-started set of 9);
+phases 2–4 of docs/ACHIEVEMENTS_SPEC.md pending (full catalog, sweep
+task, lol_match_history stat columns).
 
 Config knobs all live in `src/config.js`. Env template: `.env.example`
 (DISCORD_TOKEN, CLIENT_ID, GUILD_ID, DATABASE_URL, ANTHROPIC_API_KEY,

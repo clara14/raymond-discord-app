@@ -26,8 +26,8 @@ The relational model behind the bot, as ER diagrams with design notes.
    guild, one active blackjack game per player, one active loan per
    borrower — enforced by the database, not by application discipline.
 5. **Composite primary keys make writes idempotent.** Recording the same
-   LoL match twice, double-betting a match, or replaying a wordle day
-   inserts nothing instead of corrupting state.
+   LoL match twice, double-betting a match, replaying a wordle day, or
+   re-earning an achievement inserts nothing instead of corrupting state.
 6. **The database clock is the only clock.** Cooldowns, streaks, and the
    wordle day all use `now()` / `CURRENT_DATE` so behavior doesn't depend
    on where the bot process runs.
@@ -226,6 +226,25 @@ erDiagram
         text moderator_id
         text reason
         timestamptz created_at
+    }
+```
+
+## Achievements
+
+The catalog (names, tiers, check functions) lives in code —
+`src/data/achievements.js` — so new achievements never need schema
+changes. This table only records who earned what. Awarding uses
+`INSERT ... ON CONFLICT DO NOTHING RETURNING` (the welcome-bonus
+pattern): a returned row means "newly earned, announce it". Checks run
+*after* money transactions commit, never inside them.
+
+```mermaid
+erDiagram
+    user_achievements {
+        text guild_id PK
+        text user_id PK
+        text achievement_id PK "catalog id from src/data/achievements.js"
+        timestamptz earned_at
     }
 ```
 

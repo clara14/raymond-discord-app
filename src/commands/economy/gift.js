@@ -6,6 +6,8 @@
 
 import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
 import { giftTransfer, ensureWelcomeBonus } from '../../database/economy.js';
+import { checkAchievements } from '../../database/achievements.js';
+import { announceAchievements } from '../../lib/achievements.js';
 import { GIFT, giftNet, formatCurrency } from '../../config.js';
 
 export const data = new SlashCommandBuilder()
@@ -84,4 +86,13 @@ export async function execute(interaction) {
     );
 
   await interaction.reply({ embeds: [embed] });
+
+  // Achievement checks run after the gift committed. The item id rides
+  // along for future item-specific checks (e.g. the diamond).
+  const earned = await checkAchievements(interaction.guildId, interaction.user.id, 'gift', {
+    item: item.id,
+    price: item.price,
+    to: recipient.id,
+  });
+  await announceAchievements(interaction, earned);
 }

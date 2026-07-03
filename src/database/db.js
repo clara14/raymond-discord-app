@@ -381,6 +381,23 @@ export async function initDatabase() {
     );
   `);
 
+  // --- Achievements: earned trophies ---
+  // The CATALOG (names, tiers, check functions) lives in code —
+  // src/data/achievements.js — so adding an achievement never needs a
+  // schema change. This table only records who earned what, when.
+  // The composite PK makes awarding idempotent: INSERT ... ON CONFLICT
+  // DO NOTHING RETURNING tells us "newly earned" (row returned) vs
+  // "already had it" (nothing) — the welcome-bonus pattern again.
+  await query(`
+    CREATE TABLE IF NOT EXISTS user_achievements (
+      guild_id       TEXT        NOT NULL,
+      user_id        TEXT        NOT NULL,
+      achievement_id TEXT        NOT NULL,  -- catalog id, e.g. 'first_daily'
+      earned_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (guild_id, user_id, achievement_id)
+    );
+  `);
+
   console.log('  ✓ Database initialized');
 
   // One-time (idempotent) backfill: hash any pre-existing rows so the
