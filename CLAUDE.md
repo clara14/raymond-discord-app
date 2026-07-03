@@ -46,6 +46,9 @@ sessions in Claude chat; this file transfers that accumulated knowledge.
   plus **additive migrations** (`ALTER TABLE ... ADD COLUMN IF NOT EXISTS`).
   Schema evolves ONLY this way — no destructive changes, no migration tool.
   Ends by calling `backfillLedgerHashes()` (idempotent).
+- `src/database/guildSettings.js` — per-server config (the guild_settings
+  table; currently just the LoL announcement channel). Future per-guild
+  settings belong here as new columns, not in feature modules.
 - `src/tasks/matchPoller.js` — background LoL poller (self-rescheduling
   setTimeout, never setInterval; survives all errors). Detects live games,
   announces with betting buttons, settles/voids, syncs match history every
