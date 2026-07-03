@@ -111,6 +111,9 @@ RIOT_API_KEY, RIOT_CLUSTER, RIOT_PLATFORM). No .env exists until deploy:
 ## Places to know
 
 - `docs/IDEAS.md` — the feature backlog (checklist; keep it updated).
+- `docs/DATABASE.md` — ER diagrams + schema design notes. ANY schema
+  change in db.js (table, column, index) updates this file in the same
+  commit — it must always mirror initDatabase().
 - `docs/shelved/voice-tts/` — complete shelved voice/TTS feature with
   reintegration NOTES.md (likely revival: /say only, no chat integration).
 - Update workflow on a live host: git pull → npm install (if deps changed)
