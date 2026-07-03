@@ -19,10 +19,10 @@ Check items off as they're built; add new ideas at will.
 - [ ] Nickname ransom / paid mischief (rename someone for an hour; victim pays to undo)
 
 ## Games
-- [ ] Slots with tunable reel odds and payout table
+- [x] Slots with tunable reel odds and payout table
 - [ ] Trivia with themed question banks + monies rewards (buttons make it cheap)
 - [ ] RPS duels with wagers (optionally with a small house rake)
-- [ ] Wordle-style daily puzzle with a monies prize
+- [x] Wordle-style daily puzzle with a monies prize
 
 ## League of Legends — layer two
 - [ ] Weekly hall of shame: worst KDA of the week, auto-posted (data already collected)
