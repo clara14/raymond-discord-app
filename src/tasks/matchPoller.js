@@ -17,8 +17,8 @@ import {
   MessageFlags,
 } from 'discord.js';
 import { getAllLinks } from '../database/linkedAccounts.js';
+import { getConfiguredGuilds } from '../database/guildSettings.js';
 import {
-  getConfiguredGuilds,
   getLiveMatches,
   trackMatch,
   setMatchMessage,

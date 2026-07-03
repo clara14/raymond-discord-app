@@ -5,36 +5,15 @@
 // ============================================================
 
 import { REST, Routes } from 'discord.js';  // REST client + API route builders
-import { readdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
 import 'dotenv/config';
+import { loadCommandModules } from './handlers/commandHandler.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-// Collect the JSON definition of every command to send to Discord.
-const commands = [];
-const commandsPath = join(__dirname, 'commands');
-
-// Loop category folders, then command files within them.
-const categories = readdirSync(commandsPath, { withFileTypes: true })
-  .filter((entry) => entry.isDirectory())
-  .map((entry) => entry.name);
-
-for (const category of categories) {
-  const categoryPath = join(commandsPath, category);
-  const commandFiles = readdirSync(categoryPath).filter((file) => file.endsWith('.js'));
-
-  for (const file of commandFiles) {
-    const filePath = join(categoryPath, file);
-    const command = await import(pathToFileURL(filePath).href);
-    // .toJSON() converts the SlashCommandBuilder into the raw payload
-    // Discord's API expects.
-    if ('data' in command) {
-      commands.push(command.data.toJSON());
-    }
-  }
-}
+// Reuse the bot's own command discovery, then convert each definition to
+// the raw JSON payload Discord's API expects. Only `data` matters here —
+// deployment sends definitions, not behavior.
+const commands = (await loadCommandModules())
+  .filter(({ module }) => 'data' in module)
+  .map(({ module }) => module.data.toJSON());
 
 // Authenticate the REST client with the bot token.
 const rest = new REST().setToken(process.env.DISCORD_TOKEN);

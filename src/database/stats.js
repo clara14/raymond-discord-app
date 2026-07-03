@@ -4,11 +4,10 @@
 // features already record; nothing new is written here.
 // ============================================================
 
-import { query } from './db.js';
+import { pool, query } from './db.js';
 import { getBalance } from './economy.js';
 import { getLoanStatus } from './loans.js';
 import { bankedBalance } from './bank.js';
-import { pool } from './db.js';
 
 /**
  * Top ACTIVE daily streaks in a guild. The stored streak is only real if

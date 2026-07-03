@@ -10,7 +10,7 @@ import {
   ChannelType,
   MessageFlags,
 } from 'discord.js';
-import { setLolChannel, getLolChannel } from '../../database/lolBets.js';
+import { setLolChannel, getLolChannel } from '../../database/guildSettings.js';
 
 export const data = new SlashCommandBuilder()
   .setName('lolchannel')
