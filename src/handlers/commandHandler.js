@@ -3,7 +3,8 @@
 // Walks commands/<category>/*.js and registers each one on the
 // client, so adding a command never means editing this file.
 // The walker itself is exported separately because the deploy
-// script needs the same file discovery without a client.
+// script and the test suite need the same file discovery
+// without a client.
 // ============================================================
 
 import { readdirSync } from 'node:fs';               // Read directory contents
@@ -14,12 +15,14 @@ import { fileURLToPath, pathToFileURL } from 'node:url'; // ESM path <-> URL hel
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
- * Discovers and imports every command module under commands/<category>/.
- * Returns [{ module, category, filePath }] and does NO validation — each
- * caller decides what a "usable" command looks like (the bot needs
- * data + execute; the deploy script only needs data). This is the single
- * source of truth for what counts as a command file, shared by the bot's
- * startup and deploy-commands.js so the two can never disagree.
+ * Discovers and imports every command module under commands/<category>/,
+ * WITHOUT touching a client. Returns [{ category, file, filePath, module }]
+ * in directory order and does NO validation — each caller decides what a
+ * "usable" command looks like (the bot needs data + execute; the deploy
+ * script only needs data; the test suite checks the full shape itself).
+ * This is the single source of truth for what counts as a command file,
+ * shared by startup, deploy-commands.js, and the loader smoke test, so
+ * they can never disagree.
  */
 export async function loadCommandModules() {
   // Path to the top-level commands directory.
@@ -42,7 +45,7 @@ export async function loadCommandModules() {
 
       // pathToFileURL makes dynamic import work reliably across OSes.
       const module = await import(pathToFileURL(filePath).href);
-      modules.push({ module, category, filePath });
+      modules.push({ category, file, filePath, module });
     }
   }
   return modules;
@@ -53,7 +56,7 @@ export async function loadCommandModules() {
  * Each command file must export `data` (a SlashCommandBuilder) and `execute`.
  */
 export async function loadCommands(client) {
-  for (const { module, category, filePath } of await loadCommandModules()) {
+  for (const { category, filePath, module } of await loadCommandModules()) {
     // Guard: a valid command must expose both `data` and `execute`.
     if ('data' in module && 'execute' in module) {
       // Key the command by its slash name so events can look it up fast.
