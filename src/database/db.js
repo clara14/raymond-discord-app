@@ -6,6 +6,7 @@
 
 import pg from 'pg';        // node-postgres: the PostgreSQL client for Node
 import 'dotenv/config';      // Ensure DATABASE_URL is loaded from .env
+import { hashRow, GENESIS } from '../lib/ledgerHash.js'; // used by the startup backfill below
 
 const { Pool } = pg;
 
@@ -388,9 +389,6 @@ export async function initDatabase() {
   // order, chaining from the last already-hashed row (or GENESIS).
   await backfillLedgerHashes();
 }
-
-// Imported lazily-adjacent: the hashing primitives live in lib.
-import { hashRow, GENESIS } from '../lib/ledgerHash.js';
 
 async function backfillLedgerHashes() {
   const { rows: guilds } = await query(

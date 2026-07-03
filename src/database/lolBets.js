@@ -7,34 +7,6 @@
 import { query } from './db.js';
 import { withTransaction, lockMoney, ledgerBalance, insertLedger } from './tx.js';
 
-/** The channel configured for LoL announcements in a guild (or null). */
-export async function getLolChannel(guildId) {
-  const { rows } = await query(
-    `SELECT lol_channel_id FROM guild_settings WHERE guild_id = $1`,
-    [guildId],
-  );
-  return rows[0]?.lol_channel_id ?? null;
-}
-
-/** Sets (or clears, with null) the LoL announcement channel for a guild. */
-export async function setLolChannel(guildId, channelId) {
-  await query(
-    `INSERT INTO guild_settings (guild_id, lol_channel_id)
-     VALUES ($1, $2)
-     ON CONFLICT (guild_id) DO UPDATE SET lol_channel_id = $2`,
-    [guildId, channelId],
-  );
-}
-
-/** Every guild that has an announcement channel configured. */
-export async function getConfiguredGuilds() {
-  const { rows } = await query(
-    `SELECT guild_id, lol_channel_id FROM guild_settings
-     WHERE lol_channel_id IS NOT NULL`,
-  );
-  return rows;
-}
-
 /**
  * Records a newly detected live game. The unique (guild, riot_game_id)
  * index makes this idempotent: re-detecting the same game inserts nothing

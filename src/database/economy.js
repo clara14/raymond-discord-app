@@ -192,29 +192,23 @@ export async function resolveWager(guildId, userId, bet, play) {
 
 /**
  * Resolves a coinflip: checks funds, flips, records one signed row
- * (win +bet, lose -bet). Returns { ok:false, reason:'insufficient' } or
+ * (win +bet, lose -bet). Built on resolveWager like every other game —
+ * the flip itself is just the play() callback.
+ * Returns { ok:false, reason:'insufficient' } or
  * { ok:true, won, result, newBalance }.
  */
-export async function resolveCoinflip(guildId, userId, bet, guess) {
-  const outcome = await withTransaction(async (client) => {
-    await lockMoney(client, guildId, userId);
-
-    if ((await ledgerBalance(client, guildId, userId)) < bet) {
-      return { ok: false, reason: 'insufficient' };
-    }
-
+export function resolveCoinflip(guildId, userId, bet, guess) {
+  return resolveWager(guildId, userId, bet, (wager) => {
     const result = Math.random() < 0.5 ? 'heads' : 'tails';
     const won = result === guess;
-    const net = won ? bet : -bet;
-
-    await insertLedger(client, guildId, userId, net, 'coinflip', {
-      bet, guess, result, won,
-    });
-    return { ok: true, won, result };
+    return {
+      net: won ? wager : -wager,
+      type: 'coinflip',
+      metadata: { bet: wager, guess, result, won },
+      won,
+      result,
+    };
   });
-
-  if (!outcome.ok) return outcome;
-  return { ...outcome, newBalance: await getBalance(guildId, userId) };
 }
 
 /**
