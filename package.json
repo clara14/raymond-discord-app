@@ -1,7 +1,7 @@
 {
   "name": "discord-bot",
   "version": "1.0.0",
-  "description": "A multipurpose Discord bot for moderation, games, Genshin utilities, and practical tools",
+  "description": "A multipurpose Discord bot for a friends server: monies economy with a hash-chained ledger, gambling games, LoL match betting, and an AI chat personality",
   "main": "src/index.js",
   "type": "module",
   "scripts": {
