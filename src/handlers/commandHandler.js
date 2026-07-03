@@ -12,17 +12,22 @@ import { fileURLToPath, pathToFileURL } from 'node:url'; // ESM path <-> URL hel
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
- * Loads every command from commands/ and its subfolders onto client.commands.
- * Each command file must export `data` (a SlashCommandBuilder) and `execute`.
+ * Discovers and imports every command file, WITHOUT touching a client.
+ * Split out from loadCommands so the test suite can smoke-test "does every
+ * command file actually import and export the right shape?" with no Discord
+ * client (and no login) involved.
+ * Returns [{ category, file, filePath, module }] in directory order.
  */
-export async function loadCommands(client) {
+export async function loadCommandModules() {
   // Path to the top-level commands directory.
   const commandsPath = join(__dirname, '..', 'commands');
 
-  // Get each category subfolder (utility, moderation, games, genshin).
+  // Get each category subfolder (utility, moderation, games, lol, ...).
   const categories = readdirSync(commandsPath, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name);
+
+  const modules = [];
 
   // Walk each category folder.
   for (const category of categories) {
@@ -31,23 +36,33 @@ export async function loadCommands(client) {
     // Only pick up .js files inside the category.
     const commandFiles = readdirSync(categoryPath).filter((file) => file.endsWith('.js'));
 
-    // Import each command file and register it if it has the required shape.
     for (const file of commandFiles) {
       const filePath = join(categoryPath, file);
 
       // pathToFileURL makes dynamic import work reliably across OSes.
-      const command = await import(pathToFileURL(filePath).href);
+      const module = await import(pathToFileURL(filePath).href);
+      modules.push({ category, file, filePath, module });
+    }
+  }
 
-      // Guard: a valid command must expose both `data` and `execute`.
-      if ('data' in command && 'execute' in command) {
-        // Key the command by its slash name so events can look it up fast.
-        client.commands.set(command.data.name, command);
-        console.log(`  ✓ Loaded command: ${command.data.name} (${category})`);
-      } else {
-        // Warn (don't crash) on malformed files so one bad command
-        // doesn't take the whole bot down at startup.
-        console.warn(`  ⚠ Skipped ${filePath} — missing "data" or "execute" export`);
-      }
+  return modules;
+}
+
+/**
+ * Loads every command from commands/ and its subfolders onto client.commands.
+ * Each command file must export `data` (a SlashCommandBuilder) and `execute`.
+ */
+export async function loadCommands(client) {
+  for (const { category, filePath, module } of await loadCommandModules()) {
+    // Guard: a valid command must expose both `data` and `execute`.
+    if ('data' in module && 'execute' in module) {
+      // Key the command by its slash name so events can look it up fast.
+      client.commands.set(module.data.name, module);
+      console.log(`  ✓ Loaded command: ${module.data.name} (${category})`);
+    } else {
+      // Warn (don't crash) on malformed files so one bad command
+      // doesn't take the whole bot down at startup.
+      console.warn(`  ⚠ Skipped ${filePath} — missing "data" or "execute" export`);
     }
   }
 }
