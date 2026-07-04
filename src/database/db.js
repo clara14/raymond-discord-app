@@ -365,6 +365,18 @@ export async function initDatabase() {
     ON lol_match_history (puuid, ended_at DESC);
   `);
 
+  // Additive migration: highlight stats MATCH-V5 already returns that we
+  // previously discarded — they unlock the pentakill/first-blood/cs
+  // achievements. Rows recorded BEFORE this migration keep the defaults
+  // (0/false), so historical pentas are invisible; only matches recorded
+  // from now on count. cs = lane + jungle minions combined.
+  await query(`
+    ALTER TABLE lol_match_history
+    ADD COLUMN IF NOT EXISTS penta_kills INT     NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS first_blood BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN IF NOT EXISTS cs          INT     NOT NULL DEFAULT 0;
+  `);
+
   // --- Wordle: daily puzzle state ---
   // One row per player per day per guild. Guesses accumulate as JSONB
   // [[guess, marks], ...]; the composite PK enforces one puzzle a day.

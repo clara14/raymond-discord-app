@@ -200,6 +200,9 @@ export function computePenalty(robberWallet) {
 export const ACHIEVEMENT_SWEEP = {
   intervalSec: 3600,     // hourly is plenty — events do the real-time work
   startupDelaySec: 90,   // first pass shortly after boot = the backfill run
+  quietFirstPass: true,  // boot sweep awards SILENTLY (no channel messages) —
+                         // protects against a trophy flood when a catalog
+                         // update or data import backfills many users at once
 };
 
 // League of Legends match announcements + betting.

@@ -448,6 +448,24 @@ export const ACHIEVEMENTS = [
     description: 'Play 50 recorded ARAM games.',
     triggers: ['lol_match'],
     check: async ({ queries }) => (await queries.lolQueueCount(450)) >= 50 },
+  // Phase-4 highlight stats. Only matches recorded after the migration
+  // carry real values (older rows default 0/false), so these can't be
+  // earned retroactively for pre-migration games.
+  { id: 'lol_pentakill', name: 'Pentakill!', emoji: '⚔️', tier: 'legendary', secret: false,
+    description: 'Score a pentakill in a recorded game.',
+    triggers: ['lol_match'],
+    check: async ({ event, queries }) =>
+      event ? (event.pentaKills ?? 0) >= 1 : queries.hasLolGameWhere({ minPentas: 1 }) },
+  { id: 'lol_first_blood', name: 'First Blood', emoji: '🩸', tier: 'uncommon', secret: false,
+    description: 'Draw first blood in a recorded game.',
+    triggers: ['lol_match'],
+    check: async ({ event, queries }) =>
+      event ? event.firstBlood === true : queries.hasLolGameWhere({ firstBlood: true }) },
+  { id: 'lol_cs_300', name: 'Farming Simulator', emoji: '🌾', tier: 'rare', secret: false,
+    description: 'Farm 300+ cs in a single game.',
+    triggers: ['lol_match'],
+    check: async ({ event, queries }) =>
+      event ? (event.cs ?? 0) >= 300 : queries.hasLolGameWhere({ minCs: 300 }) },
 
   // --- League of Legends: match betting ---
   { id: 'bet_first_win', name: 'Oracle', emoji: '🔮', tier: 'common', secret: false,

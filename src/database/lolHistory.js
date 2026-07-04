@@ -24,6 +24,11 @@ export function extractParticipant(matchDetail, puuid) {
     win: me.win,
     queueId: matchDetail.info.queueId,
     durationSec: matchDetail.info.gameDuration,
+    // Highlight stats for the achievement system. ?? guards keep very old
+    // or unusual match payloads (missing fields) from breaking recording.
+    pentaKills: me.pentaKills ?? 0,
+    firstBlood: me.firstBloodKill ?? false,
+    cs: (me.totalMinionsKilled ?? 0) + (me.neutralMinionsKilled ?? 0),
     endedAt: new Date(
       // gameEndTimestamp is the reliable field on modern matches; fall back
       // to start + duration for older records.
@@ -38,11 +43,11 @@ export async function recordMatch(matchId, puuid, userId, p) {
   await query(
     `INSERT INTO lol_match_history
        (match_id, puuid, user_id, champion, kills, deaths, assists,
-        win, queue_id, duration_sec, ended_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        win, queue_id, duration_sec, penta_kills, first_blood, cs, ended_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
      ON CONFLICT (match_id, puuid) DO NOTHING`,
     [matchId, puuid, userId, p.champion, p.kills, p.deaths, p.assists,
-     p.win, p.queueId, p.durationSec, p.endedAt],
+     p.win, p.queueId, p.durationSec, p.pentaKills, p.firstBlood, p.cs, p.endedAt],
   );
 }
 

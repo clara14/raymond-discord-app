@@ -26,18 +26,21 @@ export function startAchievementSweep(client) {
   console.log(`  ✓ Achievement sweep running (every ${ACHIEVEMENT_SWEEP.intervalSec}s)`);
   // The first pass runs shortly after boot — that's the retroactive
   // backfill working through whatever history predates the catalog.
-  scheduleNext(ACHIEVEMENT_SWEEP.startupDelaySec * 1000);
+  // It can award MANY trophies at once (new catalog entries, restored
+  // data), so quietFirstPass suppresses its announcements: awards still
+  // land and show in /achievements, the channel just stays calm.
+  scheduleNext(ACHIEVEMENT_SWEEP.startupDelaySec * 1000, ACHIEVEMENT_SWEEP.quietFirstPass);
 }
 
-function scheduleNext(ms = ACHIEVEMENT_SWEEP.intervalSec * 1000) {
+function scheduleNext(ms = ACHIEVEMENT_SWEEP.intervalSec * 1000, quiet = false) {
   setTimeout(async () => {
     try {
-      await sweepOnce();
+      await sweepOnce(quiet);
     } catch (err) {
       // The loop must survive anything — log and keep going.
       console.error('Achievement sweep error:', err);
     }
-    scheduleNext();
+    scheduleNext(); // steady-state passes always announce
   }, ms);
 }
 
@@ -58,7 +61,8 @@ async function getActiveUsers() {
 // One full pass over every active user. Sequential on purpose: this is
 // a background chore for a friends server, and a gentle stream of small
 // indexed queries beats a thundering herd once an hour.
-async function sweepOnce() {
+// `quiet` awards without announcing (the boot pass's flood guard).
+async function sweepOnce(quiet = false) {
   const users = await getActiveUsers();
   let awarded = 0;
 
@@ -69,6 +73,7 @@ async function sweepOnce() {
     const earned = await sweepUser(guild_id, user_id);
     if (earned.length === 0) continue;
     awarded += earned.length;
+    if (quiet) continue; // awards persisted; announcements suppressed
 
     if (!channelCache.has(guild_id)) {
       channelCache.set(guild_id, await getAchievementChannel(guild_id));
@@ -79,6 +84,9 @@ async function sweepOnce() {
   }
 
   if (awarded > 0) {
-    console.log(`  🏆 Achievement sweep granted ${awarded} award(s) across ${users.length} user(s)`);
+    console.log(
+      `  🏆 Achievement sweep granted ${awarded} award(s) across ${users.length} user(s)` +
+        (quiet ? ' (quiet first pass — not announced)' : ''),
+    );
   }
 }

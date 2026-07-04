@@ -484,7 +484,8 @@ export function makeQueries(guildId, userId) {
 
     /** A LoL game matching stat bounds exists? One flexible EXISTS query. */
     hasLolGameWhere: async ({ minKills = null, maxKills = null, minDeaths = null,
-                              maxDeaths = null, minDurationSec = null } = {}) => {
+                              maxDeaths = null, minDurationSec = null,
+                              minPentas = null, firstBlood = null, minCs = null } = {}) => {
       const { rows } = await query(
         `SELECT EXISTS (
            SELECT 1 FROM lol_match_history h
@@ -495,8 +496,12 @@ export function makeQueries(guildId, userId) {
              AND ($4::int IS NULL OR h.deaths >= $4)
              AND ($5::int IS NULL OR h.deaths <= $5)
              AND ($6::int IS NULL OR h.duration_sec >= $6)
+             AND ($7::int IS NULL OR h.penta_kills >= $7)
+             AND ($8::boolean IS NULL OR h.first_blood = $8)
+             AND ($9::int IS NULL OR h.cs >= $9)
          ) AS yes`,
-        [userId, minKills, maxKills, minDeaths, maxDeaths, minDurationSec],
+        [userId, minKills, maxKills, minDeaths, maxDeaths, minDurationSec,
+         minPentas, firstBlood, minCs],
       );
       return rows[0].yes;
     },

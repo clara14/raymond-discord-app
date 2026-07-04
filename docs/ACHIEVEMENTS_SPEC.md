@@ -1,10 +1,13 @@
 # Achievements System — Design Spec
 
-> **Status:** Phases 1–3 shipped 2026-07-03 (framework, full catalog of
-> 72, all wiring, hourly self-healing sweep with retroactive backfill on
-> first run, announce_channel_id migration with lol_channel_id fallback).
-> Phase 4 (lol_match_history stat columns) pending. Moment-only awards
-> the sweep can never grant: poll_starter, loan_maxed, raffle_underdog,
+> **Status:** ALL FOUR PHASES shipped 2026-07-03. Framework, full
+> catalog (75 with the phase-4 trio: Pentakill!/First Blood/Farming
+> Simulator), all wiring, hourly self-healing sweep with retroactive
+> backfill on first run, announce_channel_id migration with
+> lol_channel_id fallback, and the lol_match_history highlight-stat
+> columns (penta_kills/first_blood/cs — pre-migration rows hold
+> defaults, so those three aren't retroactive). Moment-only awards the
+> sweep can never grant: poll_starter, loan_maxed, raffle_underdog,
 > bj_natural, bj_five_card, bj_comeback. No command sets
 > announce_channel_id yet — the LoL-channel fallback covers it.
 

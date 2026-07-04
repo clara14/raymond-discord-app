@@ -188,6 +188,9 @@ erDiagram
         boolean win
         int queue_id "420 solo, 450 ARAM, ..."
         int duration_sec
+        int penta_kills "highlight stats (phase-4 migration);"
+        boolean first_blood "pre-migration rows hold defaults"
+        int cs "lane + jungle minions combined"
         timestamptz ended_at
     }
 

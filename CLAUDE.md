@@ -108,12 +108,12 @@ loan, pay, profile, raffle, rob, work · games: blackjack, coinflip, slots,
 wordle · lol: history, link, lolchannel, lolstats · moderation: warn ·
 utility: achievements, fact, ping, poll
 
-Achievements: phases 1–3 shipped (framework, full 72-achievement
-catalog, all wiring, hourly self-healing sweep in
-src/tasks/achievementSweep.js — SWEEP CONTRACT: every check must verify
+Achievements: ALL PHASES of docs/ACHIEVEMENTS_SPEC.md shipped —
+75-achievement catalog, full wiring, hourly self-healing sweep in
+src/tasks/achievementSweep.js. SWEEP CONTRACT: every check must verify
 from queries alone on a null event or return false; the blank-user test
-enforces it). Phase 4 of docs/ACHIEVEMENTS_SPEC.md pending
-(lol_match_history stat columns for penta/first-blood/cs badges).
+enforces it. lol_match_history now records penta_kills/first_blood/cs
+(new matches only). Every new feature ships 2–3 achievements in its PR.
 
 Config knobs all live in `src/config.js`. Env template: `.env.example`
 (DISCORD_TOKEN, CLIENT_ID, GUILD_ID, DATABASE_URL, ANTHROPIC_API_KEY,

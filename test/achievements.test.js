@@ -279,6 +279,12 @@ const CASES = [
   ['lol_100_games', { queries: { lolGameCount: async () => 99 } },  false],
   ['lol_aram_50', { queries: { lolQueueCount: async (q) => (q === 450 ? 50 : 0) } }, true],
   ['lol_aram_50', { queries: { lolQueueCount: async () => 49 } }, false],
+  ['lol_pentakill', { event: { pentaKills: 1 } }, true],
+  ['lol_pentakill', { event: { pentaKills: 0 } }, false],
+  ['lol_first_blood', { event: { firstBlood: true } },  true],
+  ['lol_first_blood', { event: { firstBlood: false } }, false],
+  ['lol_cs_300', { event: { cs: 300 } }, true],
+  ['lol_cs_300', { event: { cs: 299 } }, false],
 
   // LoL — betting.
   ['bet_first_win', { event: { correct: true } },  true],
@@ -349,6 +355,9 @@ const SWEEP_CASES = [
   ['lol_deathless', { hasLolGameWhere: async (b) => b.maxDeaths === 0 }, true],
   ['lol_20kills',   { hasLolGameWhere: async (b) => b.minKills === 20 }, true],
   ['lol_0_10',      { hasLolGameWhere: async (b) => b.minDeaths === 10 }, true],
+  ['lol_pentakill',   { hasLolGameWhere: async (b) => b.minPentas === 1 }, true],
+  ['lol_first_blood', { hasLolGameWhere: async (b) => b.firstBlood === true }, true],
+  ['lol_cs_300',      { hasLolGameWhere: async (b) => b.minCs === 300 }, true],
   ['bet_first_win', { hasCorrectBet: async () => true }, true],
   ['bet_traitor',   { hasTraitorWin: async () => true }, true],
   ['bet_max_win',   { maxCorrectBet: async () => LOL.maxBet }, true],
