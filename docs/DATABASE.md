@@ -152,6 +152,7 @@ erDiagram
     guild_settings {
         text guild_id PK
         text lol_channel_id "null = announcements off"
+        text announce_channel_id "achievement announcements; falls back to lol_channel_id"
     }
     lol_matches {
         bigserial id PK

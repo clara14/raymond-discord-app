@@ -2,9 +2,18 @@
 // achievements.js (data) — The achievement CATALOG.
 // Adding an achievement = adding an entry here. Awards are
 // stored by id in user_achievements, so the catalog can grow
-// forever without schema changes. Phases 1+2 of
-// docs/ACHIEVEMENTS_SPEC.md: the framework set plus the full
-// event-carried catalog.
+// forever without schema changes. Phases 1–3 of
+// docs/ACHIEVEMENTS_SPEC.md: framework, full catalog, sweep.
+//
+// SWEEP CONTRACT (the rule that keeps the sweep safe): the
+// hourly sweep runs EVERY check with event = null. A check must
+// therefore either (a) verify the feat from queries alone when
+// event is absent, or (b) return false on a null event (for
+// feats only observable in the moment, like betting against
+// your squad on a specific settlement... or starting a poll,
+// which leaves no database trace at all). A check that answered
+// true on a null event would be mass-awarded to the whole
+// server — the test suite proves a blank user sweeps clean.
 // ============================================================
 
 import { ROB, LOL } from '../config.js';
@@ -53,11 +62,22 @@ export const TRIGGERS = new Set([
 // "deathless" for a 3-minute surrender.
 const MIN_REAL_GAME_SEC = 600;
 
-// Reusable check builders for the threshold families, so the catalog
-// entries below stay one-liners.
+// Reusable check builders so the catalog entries stay one-liners.
+// "first time" family: the trigger firing qualifies; the sweep verifies
+// the same feat from recorded data instead.
+const firstOf = (verify) => async ({ event, queries }) =>
+  event ? true : Boolean(await verify(queries));
 const worthAtLeast = (n) => async ({ queries }) => (await queries.totalWorth()) >= n;
-const dailyStreakAtLeast = (n) => ({ event }) => (event?.streak ?? 0) >= n;
-const wordleStreakAtLeast = (n) => ({ event }) => Boolean(event?.solved) && (event?.streak ?? 0) >= n;
+const dailyStreakAtLeast = (n) => async ({ event, queries }) =>
+  (event ? event.streak ?? 0 : await queries.currentDailyStreak()) >= n;
+const wordleStreakAtLeast = (n) => async ({ event, queries }) => {
+  if (event) return Boolean(event.solved) && (event.streak ?? 0) >= n;
+  return (await queries.currentWordleStreak()) >= n;
+};
+const wordleSolveIn = (n) => async ({ event, queries }) => {
+  if (event) return Boolean(event.solved) && event.attempts === n;
+  return queries.hasWordleSolveIn(n);
+};
 const achievementsAtLeast = (n) => async ({ queries }) => (await queries.countAchievements()) >= n;
 
 /**
@@ -67,42 +87,49 @@ const achievementsAtLeast = (n) => async ({ queries }) => (await queries.countAc
  *   description — announcements + the goal line in /achievements locked
  *   tier        — key into TIERS
  *   secret      — hidden in the locked list until earned
- *   triggers    — which events cause this check to run
+ *   triggers    — which events cause this check to run (the sweep runs
+ *                 every check regardless, with event = null)
  *   check(ctx)  — ctx = { event, queries }; sync or async, side-effect
- *                 free. Event-only "first time" checks return true — the
- *                 awards table's composite PK supplies the "first".
- *                 Query-backed checks must tolerate event = null so the
- *                 phase-3 sweep can re-run them from data alone.
+ *                 free, and bound by the SWEEP CONTRACT above.
  */
 export const ACHIEVEMENTS = [
   // --- Getting started (one per core feature; all common, none secret) ---
   { id: 'first_daily', name: 'Early Bird', emoji: '🌅', tier: 'common', secret: false,
     description: 'Claim your first /daily.',
-    triggers: ['daily'], check: () => true },
+    triggers: ['daily'],
+    check: firstOf(async (q) => (await q.countType('daily')) > 0) },
   { id: 'first_work', name: 'Gainfully Employed', emoji: '💼', tier: 'common', secret: false,
     description: 'Do your first /work shift.',
-    triggers: ['work'], check: () => true },
+    triggers: ['work'],
+    check: firstOf(async (q) => (await q.countType('work')) > 0) },
   { id: 'first_pay', name: "It's on Me", emoji: '🤝', tier: 'common', secret: false,
     description: 'Send someone monies with /pay.',
-    triggers: ['pay'], check: () => true },
+    triggers: ['pay'],
+    check: firstOf(async (q) => (await q.countType('pay_sent')) > 0) },
   { id: 'first_bet', name: 'Feeling Lucky', emoji: '🎲', tier: 'common', secret: false,
     description: 'Place your first wager on any game.',
-    triggers: ['coinflip', 'slots', 'blackjack'], check: () => true },
+    triggers: ['coinflip', 'slots', 'blackjack'],
+    check: firstOf((q) => q.hasAnyWager()) },
   { id: 'first_gift', name: 'Gift Giver', emoji: '🎁', tier: 'common', secret: false,
     description: 'Buy someone a gift from the shop.',
-    triggers: ['gift'], check: () => true },
+    triggers: ['gift'],
+    check: firstOf(async (q) => (await q.countType('gift_sent')) > 0) },
   { id: 'first_bank', name: 'Safety First', emoji: '🏦', tier: 'common', secret: false,
     description: 'Make your first bank deposit.',
-    triggers: ['bank'], check: () => true },
+    triggers: ['bank'],
+    check: firstOf(async (q) => (await q.countType('bank_deposit')) > 0) },
   { id: 'link_account', name: "Summoner's Bind", emoji: '🔗', tier: 'common', secret: false,
     description: 'Link your Riot account.',
-    triggers: ['link'], check: () => true },
+    triggers: ['link'],
+    check: firstOf((q) => q.hasLink()) },
   { id: 'first_fact', name: 'Lore Keeper', emoji: '🧠', tier: 'common', secret: false,
     description: 'Teach the bot a /fact about someone.',
-    triggers: ['fact'], check: () => true },
+    triggers: ['fact'],
+    check: firstOf(async (q) => (await q.countFactsITaught()) > 0) },
   { id: 'first_wordle', name: 'Wordsmith', emoji: '✏️', tier: 'common', secret: false,
     description: 'Finish a daily wordle — win or lose.',
-    triggers: ['wordle'], check: () => true },
+    triggers: ['wordle'],
+    check: firstOf(async (q) => (await q.countWordleGames()) > 0) },
 
   // --- Wealth & economy ---
   { id: 'worth_1k', name: 'Four Figures', emoji: '💰', tier: 'common', secret: false,
@@ -123,12 +150,16 @@ export const ACHIEVEMENTS = [
     check: worthAtLeast(25_000) },
   { id: 'flat_broke', name: 'Rock Bottom', emoji: '🕳️', tier: 'uncommon', secret: true,
     description: 'Watch your wallet hit exactly 0 after a spend or loss.',
-    // Every trigger where the actor's wallet can shrink. The event's
-    // post-action balance is used when the command provides it; otherwise
-    // one targeted query answers it.
+    // Every trigger where the actor's wallet can shrink. Post-action
+    // balance rides on the event when the command has it; the sweep (and
+    // event-less commands) ask the ledger. A swept wallet sitting at 0
+    // still earned its way there — you can't reach 0 without spending.
     triggers: ['pay', 'gift', 'bribe', 'coinflip', 'slots', 'blackjack', 'raffle', 'rob', 'robbed'],
-    check: async ({ event, queries }) =>
-      (event?.newBalance ?? (await queries.walletBalance())) === 0 },
+    check: async ({ event, queries }) => {
+      const wallet = event?.newBalance ?? (await queries.walletBalance());
+      // A user with no ledger at all is "empty", not "broke".
+      return wallet === 0 && (event != null || (await queries.countType('welcome')) > 0);
+    } },
   { id: 'earned_10k', name: 'Grindset', emoji: '📈', tier: 'rare', secret: false,
     description: 'Earn 10,000 lifetime monies from /daily and /work.',
     triggers: ['daily', 'work'],
@@ -152,7 +183,9 @@ export const ACHIEVEMENTS = [
     check: async ({ queries }) => (await queries.sumGivenAway()) >= 1_000 },
   { id: 'big_spender', name: 'Diamond Hands', emoji: '💍', tier: 'rare', secret: false,
     description: 'Send someone the diamond gift.',
-    triggers: ['gift'], check: ({ event }) => event?.item === 'diamond' },
+    triggers: ['gift'],
+    check: async ({ event, queries }) =>
+      event ? event.item === 'diamond' : queries.hasSentGift('diamond') },
   { id: 'bribe_menu', name: 'Corruption Connoisseur', emoji: '🤫', tier: 'uncommon', secret: false,
     description: 'Pay for all three kinds of /bribe.',
     triggers: ['bribe'],
@@ -166,15 +199,22 @@ export const ACHIEVEMENTS = [
       (event?.banked ?? (await queries.bankedBalance())) >= 5_000 },
   { id: 'loan_taken', name: "Debtor's Waltz", emoji: '📝', tier: 'common', secret: false,
     description: 'Take out your first loan.',
-    triggers: ['loan'], check: ({ event }) => event?.action === 'borrow' },
+    triggers: ['loan'],
+    check: async ({ event, queries }) =>
+      event ? event.action === 'borrow' : queries.hasLoanEver() },
   { id: 'loan_cleared', name: 'Debt Free', emoji: '🎉', tier: 'uncommon', secret: false,
     description: 'Fully repay a loan.',
     // Debt can clear via /loan repay OR via garnishment finishing the job
-    // during /daily and /work — both paths mark `cleared`.
+    // during /daily and /work — both paths mark `cleared`. The sweep
+    // reads it straight off the loans table.
     triggers: ['loan', 'daily', 'work'],
-    check: ({ event }) =>
-      event?.action === 'repay' ? Boolean(event.cleared) : Boolean(event?.garnishCleared) },
+    check: async ({ event, queries }) => {
+      if (!event) return queries.hasPaidLoan();
+      return event.action === 'repay' ? Boolean(event.cleared) : Boolean(event.garnishCleared);
+    } },
   { id: 'loan_maxed', name: 'Living on Credit', emoji: '🧾', tier: 'rare', secret: true,
+    // Moment-only: the credit limit at borrow time isn't stored, so the
+    // sweep can't reconstruct this. Null event → false.
     description: 'Borrow your exact credit limit in one loan.',
     triggers: ['loan'],
     check: ({ event }) => event?.action === 'borrow' && event.amount === event.limit },
@@ -189,17 +229,26 @@ export const ACHIEVEMENTS = [
   // --- Crime ---
   { id: 'first_rob', name: 'Sticky Fingers', emoji: '🦹', tier: 'common', secret: false,
     description: 'Pull off your first successful robbery.',
-    triggers: ['rob'], check: ({ event }) => event?.success === true },
+    triggers: ['rob'],
+    check: async ({ event, queries }) =>
+      event ? event.success === true : (await queries.countType('rob_steal')) > 0 },
   { id: 'rob_fail', name: 'Caught Red-Handed', emoji: '🚨', tier: 'common', secret: false,
     description: 'Get caught failing a robbery.',
-    triggers: ['rob'], check: ({ event }) => event?.success === false },
+    triggers: ['rob'],
+    check: async ({ event, queries }) =>
+      event ? event.success === false : (await queries.countType('rob_fail')) > 0 },
   { id: 'robbed', name: 'Victim of Society', emoji: '😤', tier: 'common', secret: false,
     description: 'Get robbed. It happens to the best of us.',
-    triggers: ['robbed'], check: ({ event }) => event?.success === true },
+    triggers: ['robbed'],
+    check: async ({ event, queries }) =>
+      event ? event.success === true : (await queries.countType('rob_victim')) > 0 },
   { id: 'rob_max', name: 'Perfect Heist', emoji: '💼', tier: 'epic', secret: false,
     description: `Steal the maximum ${ROB.maxSteal} monies in a single robbery.`,
     triggers: ['rob'],
-    check: ({ event }) => event?.success === true && event.amount >= ROB.maxSteal },
+    check: async ({ event, queries }) =>
+      event
+        ? event.success === true && event.amount >= ROB.maxSteal
+        : (await queries.maxRobHaul()) >= ROB.maxSteal },
   { id: 'damages_earned', name: 'Insurance Fraud', emoji: '🤕', tier: 'uncommon', secret: true,
     description: 'Collect damages from 5 failed robberies against you.',
     triggers: ['robbed'],
@@ -207,8 +256,12 @@ export const ACHIEVEMENTS = [
   { id: 'serial_robber', name: 'Repeat Offender', emoji: '🔁', tier: 'rare', secret: false,
     description: 'Successfully rob the same person 3 times.',
     triggers: ['rob'],
-    check: async ({ event, queries }) =>
-      event?.success === true && (await queries.countRobsFrom(event.victim)) >= 3 },
+    check: async ({ event, queries }) => {
+      if (event) {
+        return event.success === true && (await queries.countRobsFrom(event.victim)) >= 3;
+      }
+      return (await queries.maxRobsFromOneVictim()) >= 3;
+    } },
   { id: 'untouchable', name: 'Untouchable', emoji: '🛡️', tier: 'rare', secret: true,
     // Note: only attempts that produced ledger rows count — a failed rob
     // by a robber too broke to pay damages leaves no trace.
@@ -222,18 +275,27 @@ export const ACHIEVEMENTS = [
   // --- Raffle ---
   { id: 'raffle_win', name: 'Jackpot Adjacent', emoji: '🎟️', tier: 'uncommon', secret: false,
     description: 'Win a raffle.',
-    triggers: ['raffle_win'], check: () => true },
+    triggers: ['raffle_win'],
+    check: async ({ event, queries }) =>
+      event ? true : (await queries.countType('raffle_win')) > 0 },
   { id: 'raffle_underdog', name: 'Lottery Miracle', emoji: '🍀', tier: 'epic', secret: false,
+    // Moment-only: the ticket share exists only at draw time (entries of
+    // past raffles could be reconstructed, but the jar sentinel rows make
+    // that more archaeology than it's worth). Null event → false.
     description: 'Win a raffle holding less than 5% of the tickets.',
     triggers: ['raffle_win'],
     check: ({ event }) =>
       (event?.pot ?? 0) > 0 && event.tickets / event.pot < 0.05 },
   { id: 'raffle_whale', name: 'Pot Committed', emoji: '🐋', tier: 'uncommon', secret: false,
     description: 'Put 1,000+ monies into a single raffle.',
-    triggers: ['raffle'], check: ({ event }) => (event?.userTickets ?? 0) >= 1_000 },
+    triggers: ['raffle'],
+    check: async ({ event, queries }) =>
+      event ? (event.userTickets ?? 0) >= 1_000 : (await queries.maxRaffleTickets()) >= 1_000 },
 
   // --- Blackjack ---
   { id: 'bj_natural', name: 'Natural 21', emoji: '♠️', tier: 'uncommon', secret: false,
+    // Moment-only: settle results aren't stored per game outcome type
+    // distinguishable from ordinary wins in the ledger. Null event → false.
     description: 'Get dealt a natural blackjack.',
     triggers: ['blackjack'], check: ({ event }) => event?.result === 'blackjack' },
   { id: 'bj_five_card', name: 'Sweating Bullets', emoji: '😅', tier: 'rare', secret: true,
@@ -256,13 +318,22 @@ export const ACHIEVEMENTS = [
   // --- Slots ---
   { id: 'slots_jackpot', name: 'Lucky Sevens', emoji: '7️⃣', tier: 'legendary', secret: false,
     description: 'Hit the triple-seven jackpot on slots.',
+    // The reels live in each spin's ledger metadata, so the sweep can
+    // find a historical jackpot the event path missed.
     triggers: ['slots'],
-    check: ({ event }) =>
-      Array.isArray(event?.reels) && event.reels.length === 3 && event.reels.every((r) => r === '7️⃣') },
+    check: async ({ event, queries }) => {
+      if (event) {
+        return Array.isArray(event.reels) && event.reels.length === 3 &&
+          event.reels.every((r) => r === '7️⃣');
+      }
+      return queries.hasSlotsTriple('7️⃣');
+    } },
   { id: 'slots_triple', name: 'Fruit Salad', emoji: '🍒', tier: 'uncommon', secret: false,
     description: 'Land any three of a kind on slots.',
     // Every triple pays 5x or better; pairs top out at 4x (two sevens).
-    triggers: ['slots'], check: ({ event }) => (event?.multiplier ?? 0) >= 5 },
+    triggers: ['slots'],
+    check: async ({ event, queries }) =>
+      event ? (event.multiplier ?? 0) >= 5 : queries.hasSlotsMultiplierAtLeast(5) },
   { id: 'slots_dry_10', name: 'Due Any Spin Now', emoji: '🫠', tier: 'uncommon', secret: true,
     description: 'Lose 10 slots spins in a row.',
     triggers: ['slots'],
@@ -305,19 +376,18 @@ export const ACHIEVEMENTS = [
   // --- Wordle ---
   { id: 'wordle_hole_in_one', name: 'Clairvoyant', emoji: '🔮', tier: 'legendary', secret: false,
     description: 'Solve the wordle on your first guess.',
-    triggers: ['wordle'],
-    check: ({ event }) => Boolean(event?.solved) && event.attempts === 1 },
+    triggers: ['wordle'], check: wordleSolveIn(1) },
   { id: 'wordle_in_two', name: 'Mind Reader', emoji: '🧙', tier: 'epic', secret: false,
     description: 'Solve the wordle in two guesses.',
-    triggers: ['wordle'],
-    check: ({ event }) => Boolean(event?.solved) && event.attempts === 2 },
+    triggers: ['wordle'], check: wordleSolveIn(2) },
   { id: 'wordle_clutch', name: 'Photo Finish', emoji: '📸', tier: 'uncommon', secret: false,
     description: 'Solve the wordle on your very last guess.',
-    triggers: ['wordle'],
-    check: ({ event }) => Boolean(event?.solved) && event.attempts === 6 },
+    triggers: ['wordle'], check: wordleSolveIn(6) },
   { id: 'wordle_fail', name: 'Vocabulary Victim', emoji: '📖', tier: 'common', secret: true,
     description: 'Run out of wordle guesses. The word was probably fake anyway.',
-    triggers: ['wordle'], check: ({ event }) => event?.solved === false },
+    triggers: ['wordle'],
+    check: async ({ event, queries }) =>
+      event ? event.solved === false : queries.hasWordleFail() },
   { id: 'wordle_streak_7', name: 'Daily Ritual', emoji: '🕯️', tier: 'uncommon', secret: false,
     description: 'Hit a 7-day wordle solve streak.',
     triggers: ['wordle'], check: wordleStreakAtLeast(7) },
@@ -333,18 +403,27 @@ export const ACHIEVEMENTS = [
     } },
 
   // --- League of Legends: recorded matches ---
+  // Row checks read the event when the poller hands them a fresh match;
+  // the sweep re-derives them from lol_match_history.
   { id: 'lol_deathless', name: 'Untouched', emoji: '😇', tier: 'rare', secret: false,
     description: 'Finish a full game with zero deaths.',
     triggers: ['lol_match'],
-    check: ({ event }) =>
-      event != null && event.deaths === 0 && event.durationSec >= MIN_REAL_GAME_SEC },
+    check: async ({ event, queries }) =>
+      event
+        ? event.deaths === 0 && event.durationSec >= MIN_REAL_GAME_SEC
+        : queries.hasLolGameWhere({ maxDeaths: 0, minDurationSec: MIN_REAL_GAME_SEC }) },
   { id: 'lol_20kills', name: 'Smurf Behavior', emoji: '🗡️', tier: 'rare', secret: false,
     description: 'Rack up 20+ kills in a single game.',
-    triggers: ['lol_match'], check: ({ event }) => (event?.kills ?? 0) >= 20 },
+    triggers: ['lol_match'],
+    check: async ({ event, queries }) =>
+      event ? (event.kills ?? 0) >= 20 : queries.hasLolGameWhere({ minKills: 20 }) },
   { id: 'lol_0_10', name: 'Hall of Shame Inductee', emoji: '💀', tier: 'rare', secret: true,
     description: 'Go 0 kills and 10+ deaths in one game. Immortalized.',
     triggers: ['lol_match'],
-    check: ({ event }) => event != null && event.kills === 0 && event.deaths >= 10 },
+    check: async ({ event, queries }) =>
+      event
+        ? event.kills === 0 && event.deaths >= 10
+        : queries.hasLolGameWhere({ maxKills: 0, minDeaths: 10 }) },
   { id: 'lol_win_streak_5', name: 'On a Heater', emoji: '🔥', tier: 'rare', secret: false,
     description: 'Win 5 recorded games in a row.',
     triggers: ['lol_match'],
@@ -373,7 +452,9 @@ export const ACHIEVEMENTS = [
   // --- League of Legends: match betting ---
   { id: 'bet_first_win', name: 'Oracle', emoji: '🔮', tier: 'common', secret: false,
     description: 'Win your first match bet.',
-    triggers: ['lolbet'], check: ({ event }) => event?.correct === true },
+    triggers: ['lolbet'],
+    check: async ({ event, queries }) =>
+      event ? event.correct === true : queries.hasCorrectBet() },
   { id: 'bet_streak_5', name: 'Sports Analyst', emoji: '📊', tier: 'epic', secret: false,
     description: 'Call 5 match bets correctly in a row.',
     triggers: ['lolbet'],
@@ -385,11 +466,15 @@ export const ACHIEVEMENTS = [
   { id: 'bet_traitor', name: 'Et Tu?', emoji: '🗡️', tier: 'rare', secret: true,
     description: 'Bet AGAINST your own squad — and be right.',
     triggers: ['lolbet'],
-    check: ({ event }) => event?.correct === true && event.onWin === false },
+    check: async ({ event, queries }) =>
+      event ? event.correct === true && event.onWin === false : queries.hasTraitorWin() },
   { id: 'bet_max_win', name: 'High Roller', emoji: '💸', tier: 'rare', secret: false,
     description: `Win a max-size (${LOL.maxBet}) match bet.`,
     triggers: ['lolbet'],
-    check: ({ event }) => event?.correct === true && event.amount >= LOL.maxBet },
+    check: async ({ event, queries }) =>
+      event
+        ? event.correct === true && event.amount >= LOL.maxBet
+        : (await queries.maxCorrectBet()) >= LOL.maxBet },
 
   // --- Meta & social ---
   { id: 'facts_about_you_5', name: 'Local Legend', emoji: '📛', tier: 'uncommon', secret: false,
@@ -397,11 +482,14 @@ export const ACHIEVEMENTS = [
     triggers: ['fact_about'],
     check: async ({ queries }) => (await queries.countFactsAboutMe()) >= 5 },
   { id: 'poll_starter', name: 'Democracy Enjoyer', emoji: '🗳️', tier: 'common', secret: false,
+    // Moment-only: polls leave no database trace, so only the event can
+    // grant this — and the sweep must never (null event → false).
     description: 'Start a poll.',
-    triggers: ['poll'], check: () => true },
+    triggers: ['poll'], check: ({ event }) => event != null },
   { id: 'warned', name: 'Seen the Mod Side', emoji: '⚠️', tier: 'common', secret: true,
     description: 'Receive a warning from a moderator.',
-    triggers: ['warn'], check: () => true },
+    triggers: ['warn'],
+    check: async ({ event, queries }) => (event ? true : queries.hasWarning()) },
   { id: 'completionist_25', name: 'Trophy Hunter', emoji: '🏆', tier: 'epic', secret: false,
     description: 'Earn 25 achievements.',
     triggers: ['meta'], check: achievementsAtLeast(25) },

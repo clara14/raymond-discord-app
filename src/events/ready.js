@@ -6,6 +6,7 @@
 
 import { Events } from 'discord.js'; // Named event constants (avoids typos)
 import { startMatchPoller, handleButton, handleModal } from '../tasks/matchPoller.js';
+import { startAchievementSweep } from '../tasks/achievementSweep.js';
 
 // The Discord event this file handles.
 export const name = Events.ClientReady;
@@ -22,4 +23,8 @@ export function execute(client) {
   // the background poller (it no-ops politely if RIOT_API_KEY isn't set).
   client.components.set('lolbet', { handleButton, handleModal });
   startMatchPoller(client);
+
+  // The hourly achievement sweep — event checks do the real-time work;
+  // this is the self-healing/retroactive safety net.
+  startAchievementSweep(client);
 }

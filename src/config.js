@@ -194,6 +194,14 @@ export function computePenalty(robberWallet) {
   return Math.min(Math.max(pct, ROB.minPenalty), robberWallet);
 }
 
+// Achievement sweep: the slow background pass that re-checks every
+// aggregate achievement per active user. Catches anything the event path
+// missed and grants new catalog entries retroactively (self-healing).
+export const ACHIEVEMENT_SWEEP = {
+  intervalSec: 3600,     // hourly is plenty — events do the real-time work
+  startupDelaySec: 90,   // first pass shortly after boot = the backfill run
+};
+
 // League of Legends match announcements + betting.
 export const LOL = {
   pollIntervalSec: 120,   // how often the poller checks linked accounts

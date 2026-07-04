@@ -306,6 +306,57 @@ const CASES = [
   ['completionist_50', { queries: { countAchievements: async () => 49 } }, false],
 ];
 
+// Sweep-path fixtures: event = null, verdict must come from queries
+// alone. One true case per sweep-capable check proves retroactive
+// awarding works; the blank-user test below proves the false side.
+const SWEEP_CASES = [
+  ['first_daily',  { countType: async (t) => (t === 'daily' ? 1 : 0) }, true],
+  ['first_work',   { countType: async (t) => (t === 'work' ? 1 : 0) }, true],
+  ['first_pay',    { countType: async (t) => (t === 'pay_sent' ? 1 : 0) }, true],
+  ['first_bet',    { hasAnyWager: async () => true }, true],
+  ['first_gift',   { countType: async (t) => (t === 'gift_sent' ? 1 : 0) }, true],
+  ['first_bank',   { countType: async (t) => (t === 'bank_deposit' ? 1 : 0) }, true],
+  ['link_account', { hasLink: async () => true }, true],
+  ['first_fact',   { countFactsITaught: async () => 1 }, true],
+  ['first_wordle', { countWordleGames: async () => 1 }, true],
+  ['flat_broke',   { walletBalance: async () => 0, countType: async () => 1 }, true],
+  ['flat_broke',   { walletBalance: async () => 0, countType: async () => 0 }, false], // empty ≠ broke
+  ['daily_streak_7',  { currentDailyStreak: async () => 7 }, true],
+  ['daily_streak_7',  { currentDailyStreak: async () => 6 }, false],
+  ['big_spender',  { hasSentGift: async (i) => i === 'diamond' }, true],
+  ['loan_taken',   { hasLoanEver: async () => true }, true],
+  ['loan_cleared', { hasPaidLoan: async () => true }, true],
+  ['loan_maxed',   {}, false], // moment-only: sweep must never grant it
+  ['first_rob',    { countType: async (t) => (t === 'rob_steal' ? 1 : 0) }, true],
+  ['rob_fail',     { countType: async (t) => (t === 'rob_fail' ? 1 : 0) }, true],
+  ['robbed',       { countType: async (t) => (t === 'rob_victim' ? 1 : 0) }, true],
+  ['rob_max',      { maxRobHaul: async () => ROB.maxSteal }, true],
+  ['rob_max',      { maxRobHaul: async () => ROB.maxSteal - 1 }, false],
+  ['serial_robber', { maxRobsFromOneVictim: async () => 3 }, true],
+  ['serial_robber', { maxRobsFromOneVictim: async () => 2 }, false],
+  ['raffle_win',   { countType: async (t) => (t === 'raffle_win' ? 1 : 0) }, true],
+  ['raffle_underdog', {}, false], // moment-only
+  ['raffle_whale', { maxRaffleTickets: async () => 1_000 }, true],
+  ['bj_natural',   {}, false],    // moment-only
+  ['slots_jackpot', { hasSlotsTriple: async (s) => s === '7️⃣' }, true],
+  ['slots_triple',  { hasSlotsMultiplierAtLeast: async (n) => n === 5 }, true],
+  ['wordle_hole_in_one', { hasWordleSolveIn: async (n) => n === 1 }, true],
+  ['wordle_in_two',      { hasWordleSolveIn: async (n) => n === 2 }, true],
+  ['wordle_clutch',      { hasWordleSolveIn: async (n) => n === 6 }, true],
+  ['wordle_fail',        { hasWordleFail: async () => true }, true],
+  ['wordle_streak_7',    { currentWordleStreak: async () => 7 }, true],
+  ['wordle_streak_7',    { currentWordleStreak: async () => 6 }, false],
+  ['lol_deathless', { hasLolGameWhere: async (b) => b.maxDeaths === 0 }, true],
+  ['lol_20kills',   { hasLolGameWhere: async (b) => b.minKills === 20 }, true],
+  ['lol_0_10',      { hasLolGameWhere: async (b) => b.minDeaths === 10 }, true],
+  ['bet_first_win', { hasCorrectBet: async () => true }, true],
+  ['bet_traitor',   { hasTraitorWin: async () => true }, true],
+  ['bet_max_win',   { maxCorrectBet: async () => LOL.maxBet }, true],
+  ['bet_max_win',   { maxCorrectBet: async () => LOL.maxBet - 1 }, false],
+  ['poll_starter',  {}, false],   // no database trace — sweep must never grant it
+  ['warned',        { hasWarning: async () => true }, true],
+];
+
 test('every catalog check answers its fixtures correctly', async () => {
   for (const [id, ctx, expected] of CASES) {
     const def = byId.get(id);
@@ -316,6 +367,77 @@ test('every catalog check answers its fixtures correctly', async () => {
     assert.equal(
       verdict, expected,
       `${id}: expected ${expected} for ctx ${JSON.stringify(ctx.event)}`,
+    );
+  }
+});
+
+test('sweep-path fixtures (event = null) answer from queries alone', async () => {
+  for (const [id, queries, expected] of SWEEP_CASES) {
+    const def = byId.get(id);
+    assert.ok(def, `sweep fixture references unknown achievement "${id}"`);
+    const verdict = Boolean(await def.check({ event: null, queries }));
+    assert.equal(verdict, expected, `${id}: sweep expected ${expected}`);
+  }
+});
+
+// A fake queries object representing a user with NO history at all —
+// every lookup answers zero/false/empty.
+const BLANK_USER_QUERIES = {
+  walletBalance: async () => 500, // fresh users hold the welcome bonus
+  bankedBalance: async () => 0,
+  totalWorth: async () => 500,
+  lifetimeEarned: async () => 0,
+  countType: async () => 0,
+  countTodayType: async () => 0,
+  sumGivenAway: async () => 0,
+  bribeKinds: async () => 0,
+  gamblingNet: async () => 0,
+  lastNets: async () => [],
+  lastCoinflipResults: async () => [],
+  countRobsFrom: async () => 0,
+  victimRecord: async () => ({ timesRobbed: 0, attemptsOnMe: 0 }),
+  countWordleSolves: async () => 0,
+  countFactsAboutMe: async () => 0,
+  countAchievements: async () => 0,
+  lolLastResults: async () => [],
+  lolGameCount: async () => 0,
+  lolQueueCount: async () => 0,
+  lastBetResults: async () => [],
+  hasAnyWager: async () => false,
+  hasLink: async () => false,
+  countFactsITaught: async () => 0,
+  countWordleGames: async () => 0,
+  currentDailyStreak: async () => 0,
+  currentWordleStreak: async () => 0,
+  hasWordleSolveIn: async () => false,
+  hasWordleFail: async () => false,
+  hasSentGift: async () => false,
+  hasLoanEver: async () => false,
+  hasPaidLoan: async () => false,
+  maxRobHaul: async () => 0,
+  maxRobsFromOneVictim: async () => 0,
+  maxRaffleTickets: async () => 0,
+  hasSlotsTriple: async () => false,
+  hasSlotsMultiplierAtLeast: async () => false,
+  hasCorrectBet: async () => false,
+  hasTraitorWin: async () => false,
+  maxCorrectBet: async () => 0,
+  hasLolGameWhere: async () => false,
+  hasWarning: async () => false,
+};
+
+test('SWEEP SAFETY: a blank user earns NOTHING from a null-event pass', async () => {
+  // The single most important property of the sweep: a check that
+  // answers true on a null event with empty data would be mass-awarded
+  // to the entire server within the hour. Every check must sweep clean
+  // for a user with no history. (A check calling a query missing from
+  // the fake throws — which also fails this test, deliberately: the
+  // fake doubles as the registry of legal query names.)
+  for (const def of ACHIEVEMENTS) {
+    const verdict = await def.check({ event: null, queries: BLANK_USER_QUERIES });
+    assert.equal(
+      Boolean(verdict), false,
+      `${def.id}: a user with no history must not earn this from the sweep`,
     );
   }
 });

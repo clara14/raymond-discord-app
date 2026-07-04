@@ -273,6 +273,15 @@ export async function initDatabase() {
     );
   `);
 
+  // Additive migration: where background-earned achievements (sweep,
+  // bet settlements without their own channel) get announced. Falls back
+  // to lol_channel_id at read time; if neither is set the announcement
+  // stays silent and the award still shows in /achievements.
+  await query(`
+    ALTER TABLE guild_settings
+    ADD COLUMN IF NOT EXISTS announce_channel_id TEXT;
+  `);
+
   // --- LoL: tracked matches ---
   // One row per detected live game per guild. The poller drives status:
   // 'live' (betting/playing) -> 'settled' (result found, bets paid) or

@@ -257,6 +257,260 @@ export function makeQueries(guildId, userId) {
       );
       return rows.map((r) => r.correct);
     },
+
+    // --- Sweep-path lookups: everything below re-derives a "moment"
+    // achievement from recorded data, so the hourly sweep (event = null)
+    // can award retroactively and self-heal missed events. ---
+
+    /** Has the user ever wagered on any game? */
+    hasAnyWager: async () => {
+      const { rows } = await query(
+        `SELECT EXISTS (
+           SELECT 1 FROM transactions
+           WHERE guild_id = $1 AND user_id = $2
+             AND type IN ('coinflip', 'slots', 'blackjack_bet')
+         ) AS yes`,
+        [guildId, userId],
+      );
+      return rows[0].yes;
+    },
+
+    /** Riot account linked? (Global, not per-guild — links are user-scoped.) */
+    hasLink: async () => {
+      const { rows } = await query(
+        `SELECT EXISTS (SELECT 1 FROM linked_accounts WHERE user_id = $1) AS yes`,
+        [userId],
+      );
+      return rows[0].yes;
+    },
+
+    /** Facts this user has TAUGHT (they're the added_by, not the subject). */
+    countFactsITaught: async () => {
+      const { rows } = await query(
+        `SELECT COUNT(*)::int AS n FROM user_facts
+         WHERE guild_id = $1 AND added_by = $2`,
+        [guildId, userId],
+      );
+      return rows[0].n;
+    },
+
+    /** Wordle boards ever started (finished or not — a board is a board). */
+    countWordleGames: async () => {
+      const { rows } = await query(
+        `SELECT COUNT(*)::int AS n FROM wordle_games
+         WHERE guild_id = $1 AND user_id = $2`,
+        [guildId, userId],
+      );
+      return rows[0].n;
+    },
+
+    /** The LIVE daily streak: stored value if claimed today/yesterday, else 0. */
+    currentDailyStreak: async () => {
+      const { rows } = await query(
+        `SELECT streak, (CURRENT_DATE - last_claim) AS days_since
+         FROM daily_streaks WHERE guild_id = $1 AND user_id = $2`,
+        [guildId, userId],
+      );
+      if (rows.length === 0) return 0;
+      return rows[0].days_since <= 1 ? Number(rows[0].streak) : 0;
+    },
+
+    /** Same aliveness rule for the wordle solve streak. */
+    currentWordleStreak: async () => {
+      const { rows } = await query(
+        `SELECT streak, (CURRENT_DATE - last_solve) AS days_since
+         FROM wordle_streaks WHERE guild_id = $1 AND user_id = $2`,
+        [guildId, userId],
+      );
+      if (rows.length === 0) return 0;
+      return rows[0].days_since <= 1 ? Number(rows[0].streak) : 0;
+    },
+
+    /** Ever solved a wordle in exactly N guesses? (Boards store the guesses.) */
+    hasWordleSolveIn: async (n) => {
+      const { rows } = await query(
+        `SELECT EXISTS (
+           SELECT 1 FROM wordle_games
+           WHERE guild_id = $1 AND user_id = $2 AND solved
+             AND jsonb_array_length(guesses) = $3
+         ) AS yes`,
+        [guildId, userId, n],
+      );
+      return rows[0].yes;
+    },
+
+    /** Ever failed a board (all six guesses burned, unsolved)? */
+    hasWordleFail: async () => {
+      const { rows } = await query(
+        `SELECT EXISTS (
+           SELECT 1 FROM wordle_games
+           WHERE guild_id = $1 AND user_id = $2 AND NOT solved
+             AND jsonb_array_length(guesses) >= 6
+         ) AS yes`,
+        [guildId, userId],
+      );
+      return rows[0].yes;
+    },
+
+    /** Ever sent a specific gift item? (The item id rides in metadata.) */
+    hasSentGift: async (itemId) => {
+      const { rows } = await query(
+        `SELECT EXISTS (
+           SELECT 1 FROM transactions
+           WHERE guild_id = $1 AND user_id = $2 AND type = 'gift_sent'
+             AND metadata->>'item' = $3
+         ) AS yes`,
+        [guildId, userId, itemId],
+      );
+      return rows[0].yes;
+    },
+
+    /** Ever taken a loan at all / ever fully paid one off. */
+    hasLoanEver: async () => {
+      const { rows } = await query(
+        `SELECT EXISTS (
+           SELECT 1 FROM loans WHERE guild_id = $1 AND user_id = $2
+         ) AS yes`,
+        [guildId, userId],
+      );
+      return rows[0].yes;
+    },
+    hasPaidLoan: async () => {
+      const { rows } = await query(
+        `SELECT EXISTS (
+           SELECT 1 FROM loans
+           WHERE guild_id = $1 AND user_id = $2 AND status = 'paid'
+         ) AS yes`,
+        [guildId, userId],
+      );
+      return rows[0].yes;
+    },
+
+    /** The single biggest successful haul (0 if never robbed anyone). */
+    maxRobHaul: async () => {
+      const { rows } = await query(
+        `SELECT COALESCE(MAX(amount), 0)::bigint AS haul FROM transactions
+         WHERE guild_id = $1 AND user_id = $2 AND type = 'rob_steal'`,
+        [guildId, userId],
+      );
+      return Number(rows[0].haul);
+    },
+
+    /** The most times this user has robbed any single victim. */
+    maxRobsFromOneVictim: async () => {
+      const { rows } = await query(
+        `SELECT COALESCE(MAX(n), 0)::int AS most FROM (
+           SELECT COUNT(*) AS n FROM transactions
+           WHERE guild_id = $1 AND user_id = $2 AND type = 'rob_steal'
+           GROUP BY metadata->>'from'
+         ) per_victim`,
+        [guildId, userId],
+      );
+      return rows[0].most;
+    },
+
+    /** The most tickets held in any single raffle round (whale check). */
+    maxRaffleTickets: async () => {
+      const { rows } = await query(
+        `SELECT COALESCE(MAX(e.tickets), 0)::bigint AS most
+         FROM raffle_entries e
+         JOIN raffles r ON r.id = e.raffle_id
+         WHERE r.guild_id = $1 AND e.user_id = $2`,
+        [guildId, userId],
+      );
+      return Number(rows[0].most);
+    },
+
+    /** Slots archaeology: the reels/multiplier live in each spin's metadata. */
+    hasSlotsTriple: async (symbol) => {
+      const { rows } = await query(
+        `SELECT EXISTS (
+           SELECT 1 FROM transactions
+           WHERE guild_id = $1 AND user_id = $2 AND type = 'slots'
+             AND metadata->'reels' = jsonb_build_array($3::text, $3::text, $3::text)
+         ) AS yes`,
+        [guildId, userId, symbol],
+      );
+      return rows[0].yes;
+    },
+    hasSlotsMultiplierAtLeast: async (n) => {
+      const { rows } = await query(
+        `SELECT EXISTS (
+           SELECT 1 FROM transactions
+           WHERE guild_id = $1 AND user_id = $2 AND type = 'slots'
+             AND (metadata->>'multiplier')::numeric >= $3
+         ) AS yes`,
+        [guildId, userId, n],
+      );
+      return rows[0].yes;
+    },
+
+    /** Settled-bet archaeology for the betting achievements. */
+    hasCorrectBet: async () => {
+      const { rows } = await query(
+        `SELECT EXISTS (
+           SELECT 1 FROM lol_bets b
+           JOIN lol_matches m ON m.id = b.match_row_id
+           WHERE b.bettor_id = $1 AND m.guild_id = $2
+             AND m.status = 'settled' AND b.on_win = m.won
+         ) AS yes`,
+        [userId, guildId],
+      );
+      return rows[0].yes;
+    },
+    hasTraitorWin: async () => {
+      const { rows } = await query(
+        `SELECT EXISTS (
+           SELECT 1 FROM lol_bets b
+           JOIN lol_matches m ON m.id = b.match_row_id
+           WHERE b.bettor_id = $1 AND m.guild_id = $2
+             AND m.status = 'settled' AND b.on_win = false AND m.won = false
+         ) AS yes`,
+        [userId, guildId],
+      );
+      return rows[0].yes;
+    },
+    maxCorrectBet: async () => {
+      const { rows } = await query(
+        `SELECT COALESCE(MAX(b.amount), 0)::bigint AS most
+         FROM lol_bets b
+         JOIN lol_matches m ON m.id = b.match_row_id
+         WHERE b.bettor_id = $1 AND m.guild_id = $2
+           AND m.status = 'settled' AND b.on_win = m.won`,
+        [userId, guildId],
+      );
+      return Number(rows[0].most);
+    },
+
+    /** A LoL game matching stat bounds exists? One flexible EXISTS query. */
+    hasLolGameWhere: async ({ minKills = null, maxKills = null, minDeaths = null,
+                              maxDeaths = null, minDurationSec = null } = {}) => {
+      const { rows } = await query(
+        `SELECT EXISTS (
+           SELECT 1 FROM lol_match_history h
+           JOIN linked_accounts l ON l.puuid = h.puuid
+           WHERE l.user_id = $1
+             AND ($2::int IS NULL OR h.kills >= $2)
+             AND ($3::int IS NULL OR h.kills <= $3)
+             AND ($4::int IS NULL OR h.deaths >= $4)
+             AND ($5::int IS NULL OR h.deaths <= $5)
+             AND ($6::int IS NULL OR h.duration_sec >= $6)
+         ) AS yes`,
+        [userId, minKills, maxKills, minDeaths, maxDeaths, minDurationSec],
+      );
+      return rows[0].yes;
+    },
+
+    /** Any warning on record (the sweep path for 'warned'). */
+    hasWarning: async () => {
+      const { rows } = await query(
+        `SELECT EXISTS (
+           SELECT 1 FROM warnings WHERE guild_id = $1 AND user_id = $2
+         ) AS yes`,
+        [guildId, userId],
+      );
+      return rows[0].yes;
+    },
   };
 }
 
@@ -302,6 +556,31 @@ export async function checkAchievements(guildId, userId, trigger, event = null) 
     }
   } catch (err) {
     console.error('checkAchievements error:', err);
+  }
+  return earned;
+}
+
+/**
+ * The sweep's per-user pass: runs EVERY catalog check with event = null
+ * (the sweep contract — see the catalog header) and awards whatever the
+ * data supports. This is what makes retroactive awards free: add an
+ * achievement to the catalog and the next sweep grants it to everyone
+ * who already qualifies. Returns newly-earned definitions.
+ *
+ * The completionist checks sit LAST in the catalog on purpose — by the
+ * time the loop reaches them, countAchievements already reflects
+ * everything this same pass just awarded.
+ */
+export async function sweepUser(guildId, userId) {
+  const earned = [];
+  const queries = makeQueries(guildId, userId);
+  for (const def of ACHIEVEMENTS) {
+    try {
+      if (!(await def.check({ event: null, queries }))) continue;
+      if (await awardAchievement(guildId, userId, def.id)) earned.push(def);
+    } catch (err) {
+      console.error(`Sweep check "${def.id}" failed:`, err.message);
+    }
   }
   return earned;
 }

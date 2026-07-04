@@ -37,3 +37,19 @@ export async function getConfiguredGuilds() {
   );
   return rows;
 }
+
+/**
+ * Where background-earned achievements get announced for a guild:
+ * the dedicated announce channel if set, else the LoL channel, else
+ * null (stay silent — the award still shows in /achievements).
+ * No command sets announce_channel_id yet; the fallback carries the
+ * friends server until one exists.
+ */
+export async function getAchievementChannel(guildId) {
+  const { rows } = await query(
+    `SELECT COALESCE(announce_channel_id, lol_channel_id) AS channel_id
+     FROM guild_settings WHERE guild_id = $1`,
+    [guildId],
+  );
+  return rows[0]?.channel_id ?? null;
+}

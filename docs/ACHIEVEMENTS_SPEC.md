@@ -1,10 +1,12 @@
 # Achievements System — Design Spec
 
-> **Status:** Phases 1–2 shipped 2026-07-03 (framework + full catalog of
-> 72, all command/poller wiring, fixture tests per check). Phase 3
-> (sweep + retroactive backfill + announce_channel_id) and phase 4
-> (lol_match_history stat columns) pending. Streak/serial checks are
-> event-carried for now; the sweep will add their query paths.
+> **Status:** Phases 1–3 shipped 2026-07-03 (framework, full catalog of
+> 72, all wiring, hourly self-healing sweep with retroactive backfill on
+> first run, announce_channel_id migration with lol_channel_id fallback).
+> Phase 4 (lol_match_history stat columns) pending. Moment-only awards
+> the sweep can never grant: poll_starter, loan_maxed, raffle_underdog,
+> bj_natural, bj_five_card, bj_comeback. No command sets
+> announce_channel_id yet — the LoL-channel fallback covers it.
 
 Goal: a trophy system derived (almost) entirely from data the bot ALREADY
 records — the ledger, match history, wordle boards, blackjack games,
