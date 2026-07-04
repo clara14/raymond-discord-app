@@ -7,6 +7,8 @@
 import { Events } from 'discord.js'; // Named event constants (avoids typos)
 import { startMatchPoller, handleButton, handleModal } from '../tasks/matchPoller.js';
 import { startAchievementSweep } from '../tasks/achievementSweep.js';
+import { registerDailyJob, startDailyTasks } from '../tasks/dailyTasks.js';
+import { initBirthdayJob, runBirthdayJob } from '../tasks/birthdayJob.js';
 
 // The Discord event this file handles.
 export const name = Events.ClientReady;
@@ -27,4 +29,10 @@ export function execute(client) {
   // The hourly achievement sweep — event checks do the real-time work;
   // this is the self-healing/retroactive safety net.
   startAchievementSweep(client);
+
+  // Daily jobs (run at DB midnight + a boot catch-up pass). Birthdays is
+  // the first tenant; future daily rituals register right here.
+  initBirthdayJob(client);
+  registerDailyJob('birthdays', runBirthdayJob);
+  startDailyTasks();
 }

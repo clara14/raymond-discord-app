@@ -8,7 +8,7 @@ A multipurpose Discord bot for a small server of friends, built on Node.js + dis
 - 🤖 **An AI chat personality** — @mention the bot for snarky banter; it has real tools to look up members' economy profiles and League stats, so it roasts with actual numbers
 - 🛠️ **Moderation & utility** — warnings, polls, member "facts" that feed the chat personality
 
-## Commands (26)
+## Commands (28)
 
 | Category | Commands |
 | --- | --- |
@@ -16,7 +16,7 @@ A multipurpose Discord bot for a small server of friends, built on Node.js + dis
 | games | `blackjack` `coinflip` `slots` `wordle` |
 | lol | `history` `link` `lolchannel` `lolstats` |
 | moderation | `warn` |
-| utility | `achievements` `fact` `ping` `poll` |
+| utility | `achievements` `announcechannel` `birthday` `fact` `ping` `poll` |
 
 Economy highlights: `/bank` protects monies from `/rob` (wallet-only theft), `/loan` accrues 2%/day interest with earnings garnishment, `/raffle` pools tickets for a weighted draw, and `/gift` and `/bribe` burn fees to fight inflation.
 

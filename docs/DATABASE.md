@@ -233,6 +233,28 @@ erDiagram
     }
 ```
 
+## Birthdays
+
+Self-declared only — the command layer has no way to set someone else's.
+`birth_year` is optional (null = age never shown). `last_celebrated`
+holds the year of the last announcement: the daily job celebrates only
+when it differs from the current year, then stamps it, making the
+celebration restart- and double-run-safe. Calendar logic (Feb 29 →
+Mar 1 in non-leap years) lives in `src/lib/birthdays.js`, not SQL.
+
+```mermaid
+erDiagram
+    birthdays {
+        text guild_id PK
+        text user_id PK
+        int month "CHECK 1-12; real-date validation in the command"
+        int day "CHECK 1-31"
+        int birth_year "optional - null means age never shown"
+        int last_celebrated "year of last celebration (idempotency key)"
+        timestamptz created_at
+    }
+```
+
 ## Achievements
 
 The catalog (names, tiers, check functions) lives in code —

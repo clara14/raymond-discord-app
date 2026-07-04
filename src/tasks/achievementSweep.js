@@ -14,7 +14,7 @@
 
 import { query } from '../database/db.js';
 import { sweepUser } from '../database/achievements.js';
-import { getAchievementChannel } from '../database/guildSettings.js';
+import { getAnnounceChannel } from '../database/guildSettings.js';
 import { announceToChannel } from '../lib/achievements.js';
 import { ACHIEVEMENT_SWEEP } from '../config.js';
 
@@ -76,7 +76,7 @@ async function sweepOnce(quiet = false) {
     if (quiet) continue; // awards persisted; announcements suppressed
 
     if (!channelCache.has(guild_id)) {
-      channelCache.set(guild_id, await getAchievementChannel(guild_id));
+      channelCache.set(guild_id, await getAnnounceChannel(guild_id));
     }
     // Null channel = configured silence; the trophies still show in
     // /achievements, which is the durable record anyway.

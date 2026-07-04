@@ -301,6 +301,14 @@ const CASES = [
   ['bet_max_win', { event: { correct: true, amount: LOL.maxBet - 1 } }, false],
   ['bet_max_win', { event: { correct: false, amount: LOL.maxBet } },  false],
 
+  // Birthdays.
+  ['birthday_set', { event: { month: 7, day: 4 } }, true],
+  ['birthday_celebrated', { event: { year: 2026 } }, true],
+  ['birthday_generous', { event: { to: 'u2' },
+    queries: { isUsersBirthdayToday: async (u) => u === 'u2' } }, true],
+  ['birthday_generous', { event: { to: 'u3' },
+    queries: { isUsersBirthdayToday: async (u) => u === 'u2' } }, false],
+
   // Meta & social.
   ['facts_about_you_5', { queries: { countFactsAboutMe: async () => 5 } }, true],
   ['facts_about_you_5', { queries: { countFactsAboutMe: async () => 4 } }, false],
@@ -364,6 +372,9 @@ const SWEEP_CASES = [
   ['bet_max_win',   { maxCorrectBet: async () => LOL.maxBet - 1 }, false],
   ['poll_starter',  {}, false],   // no database trace — sweep must never grant it
   ['warned',        { hasWarning: async () => true }, true],
+  ['birthday_set',        { hasBirthdaySet: async () => true }, true],
+  ['birthday_celebrated', { countType: async (t) => (t === 'birthday' ? 1 : 0) }, true],
+  ['birthday_generous',   {}, false], // moment-only: sweep must never grant it
 ];
 
 test('every catalog check answers its fixtures correctly', async () => {
@@ -433,6 +444,8 @@ const BLANK_USER_QUERIES = {
   maxCorrectBet: async () => 0,
   hasLolGameWhere: async () => false,
   hasWarning: async () => false,
+  hasBirthdaySet: async () => false,
+  isUsersBirthdayToday: async () => false,
 };
 
 test('SWEEP SAFETY: a blank user earns NOTHING from a null-event pass', async () => {

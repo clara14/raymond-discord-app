@@ -37,7 +37,7 @@ Check items off as they're built; add new ideas at will.
 - [ ] Scheduled personality moments (morning greeting with overnight economy gossip)
 
 ## Server quality-of-life
-- [ ] Birthday tracking + announcements
+- [x] Birthday tracking + announcements
 - [ ] Quote board (/quote to immortalize dumb messages)
 - [ ] /remindme reminders
 - [ ] Richer moderation: mute, purge, audit log

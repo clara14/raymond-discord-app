@@ -402,6 +402,25 @@ export async function initDatabase() {
     );
   `);
 
+  // --- Birthdays ---
+  // Self-declared only (the command layer never lets anyone set someone
+  // else's). birth_year is optional — null means age is never shown.
+  // last_celebrated is the idempotency key: the daily task celebrates
+  // only when it differs from the current year, then sets it — so a
+  // restart or double-run can never double-gift.
+  await query(`
+    CREATE TABLE IF NOT EXISTS birthdays (
+      guild_id        TEXT NOT NULL,
+      user_id         TEXT NOT NULL,
+      month           INT  NOT NULL CHECK (month BETWEEN 1 AND 12),
+      day             INT  NOT NULL CHECK (day BETWEEN 1 AND 31),
+      birth_year      INT,                    -- optional; null = age never shown
+      last_celebrated INT,                    -- year of last announcement (dedupe)
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (guild_id, user_id)
+    );
+  `);
+
   // --- Achievements: earned trophies ---
   // The CATALOG (names, tiers, check functions) lives in code —
   // src/data/achievements.js — so adding an achievement never needs a

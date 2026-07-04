@@ -53,6 +53,11 @@ sessions in Claude chat; this file transfers that accumulated knowledge.
   setTimeout, never setInterval; survives all errors). Detects live games,
   announces with betting buttons, settles/voids, syncs match history every
   5th cycle. Owns the 'lolbet' button+modal handlers.
+- `src/tasks/dailyTasks.js` — the daily-job primitive: registry
+  (`registerDailyJob(name, fn)` in ready.js) + a loop that fires at DB
+  midnight and once ~60s after boot; jobs are individually try/caught.
+  Birthdays (src/tasks/birthdayJob.js) is the first tenant — future daily
+  rituals (hall of shame, season rollovers) register alongside.
 - `src/lib/` — pure logic, one concern per file, all unit-testable:
   blackjack, slots, wordle, ledgerHash, riot (API client), anthropic
   (Messages API + tool-use loop), chatTools, wordle guess dict in src/data/.
@@ -101,12 +106,17 @@ sessions in Claude chat; this file transfers that accumulated knowledge.
 - The AI chat's tools resolve usernames via a per-conversation nameMap;
   chat_messages.user_id exists for this.
 
-## Current state (26 commands)
+## Current state (28 commands)
 
 economy: audit (mod-gated), balance, bank, bribe, daily, gift, leaderboard,
 loan, pay, profile, raffle, rob, work · games: blackjack, coinflip, slots,
 wordle · lol: history, link, lolchannel, lolstats · moderation: warn ·
-utility: achievements, fact, ping, poll
+utility: achievements, announcechannel (mod-gated), birthday, fact, ping,
+poll
+
+Birthdays: self-declared only; celebrated at DB midnight (Feb 29 → Mar 1
+in non-leap years); gift is a normal ledger row (type 'birthday');
+BIRTHDAY.roleId enables the day-role feature (default off).
 
 Achievements: ALL PHASES of docs/ACHIEVEMENTS_SPEC.md shipped —
 75-achievement catalog, full wiring, hourly self-healing sweep in

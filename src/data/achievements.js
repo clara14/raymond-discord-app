@@ -55,6 +55,8 @@ export const TRIGGERS = new Set([
   'warn',       // warning received (fired for the warned user)
   'lolbet',     // a match bet settled (event: correct, amount, onWin)
   'lol_match',  // a new match landed in lol_match_history (event: the row)
+  'birthday_set', // /birthday set succeeded
+  'birthday',   // the daily job celebrated this user (event: year)
   'meta',       // fired by the runner itself after any award (completionists)
 ]);
 
@@ -508,6 +510,21 @@ export const ACHIEVEMENTS = [
     description: 'Receive a warning from a moderator.',
     triggers: ['warn'],
     check: async ({ event, queries }) => (event ? true : queries.hasWarning()) },
+  { id: 'birthday_set', name: 'Cake Registered', emoji: '🎂', tier: 'common', secret: false,
+    description: 'Tell the bot your birthday.',
+    triggers: ['birthday_set'],
+    check: firstOf((q) => q.hasBirthdaySet()) },
+  { id: 'birthday_celebrated', name: "It's My Day", emoji: '🎉', tier: 'uncommon', secret: false,
+    description: 'Receive a birthday gift from the bot.',
+    triggers: ['birthday'],
+    check: firstOf(async (q) => (await q.countType('birthday')) > 0) },
+  { id: 'birthday_generous', name: 'Birthday Buddy', emoji: '🎁', tier: 'rare', secret: true,
+    // Moment-only: "on their birthday" is only knowable at send time
+    // (the ledger row doesn't record the recipient's birthday state).
+    description: 'Send someone monies or a gift ON their birthday.',
+    triggers: ['pay', 'gift'],
+    check: async ({ event, queries }) =>
+      event ? queries.isUsersBirthdayToday(event.to) : false },
   { id: 'completionist_25', name: 'Trophy Hunter', emoji: '🏆', tier: 'epic', secret: false,
     description: 'Earn 25 achievements.',
     triggers: ['meta'], check: achievementsAtLeast(25) },

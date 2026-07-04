@@ -194,6 +194,14 @@ export function computePenalty(robberWallet) {
   return Math.min(Math.max(pct, ROB.minPenalty), robberWallet);
 }
 
+// Birthdays: the daily task credits `gift` monies and announces. roleId,
+// when set to a real Discord role id, grants a birthday role for the day
+// (removed by the next day's run). null = no role feature.
+export const BIRTHDAY = {
+  gift: 500,
+  roleId: null,
+};
+
 // Achievement sweep: the slow background pass that re-checks every
 // aggregate achievement per active user. Catches anything the event path
 // missed and grants new catalog entries retroactively (self-healing).

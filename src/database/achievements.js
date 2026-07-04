@@ -9,6 +9,7 @@
 import { pool, query } from './db.js';
 import { ledgerBalance } from './tx.js';
 import { bankedBalance } from './bank.js';
+import { isCelebrationDay } from '../lib/birthdays.js';
 import { ACHIEVEMENTS } from '../data/achievements.js';
 
 // Ledger types that make up a gambling career. Bets and their payouts
@@ -504,6 +505,36 @@ export function makeQueries(guildId, userId) {
          minPentas, firstBlood, minCs],
       );
       return rows[0].yes;
+    },
+
+    /** Registered a birthday? (Sweep path for Cake Registered.) */
+    hasBirthdaySet: async () => {
+      const { rows } = await query(
+        `SELECT EXISTS (
+           SELECT 1 FROM birthdays WHERE guild_id = $1 AND user_id = $2
+         ) AS yes`,
+        [guildId, userId],
+      );
+      return rows[0].yes;
+    },
+
+    /**
+     * Is TODAY (DB clock) some other member's celebration day? The
+     * Birthday Buddy check calls this with the /pay or /gift recipient.
+     * Calendar logic delegates to the pure, tested isCelebrationDay.
+     */
+    isUsersBirthdayToday: async (otherUserId) => {
+      const { rows } = await query(
+        `SELECT month, day,
+                EXTRACT(YEAR FROM CURRENT_DATE)::int  AS y,
+                EXTRACT(MONTH FROM CURRENT_DATE)::int AS m,
+                EXTRACT(DAY FROM CURRENT_DATE)::int   AS d
+         FROM birthdays WHERE guild_id = $1 AND user_id = $2`,
+        [guildId, otherUserId],
+      );
+      if (rows.length === 0) return false;
+      const r = rows[0];
+      return isCelebrationDay(r.month, r.day, { year: r.y, month: r.m, day: r.d });
     },
 
     /** Any warning on record (the sweep path for 'warned'). */
