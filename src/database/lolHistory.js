@@ -49,11 +49,13 @@ export async function recordMatch(matchId, puuid, userId, p) {
 /**
  * Fetches and records any of the player's recent matches we haven't seen.
  * Shared by the /link backfill and the poller's sync — the only difference
- * is how many match ids they ask for. Returns how many were newly recorded.
+ * is how many match ids they ask for. Returns the newly recorded rows
+ * (matchId + the participant stats) so the poller can run match-based
+ * achievement checks on exactly what's new; length = how many.
  */
 export async function syncPlayerHistory(puuid, userId, count) {
   const ids = await getRecentMatchIds(puuid, count);
-  if (!ids || ids.length === 0) return 0;
+  if (!ids || ids.length === 0) return [];
 
   // One round trip to learn which of these we already have.
   const { rows } = await query(
@@ -63,7 +65,7 @@ export async function syncPlayerHistory(puuid, userId, count) {
   );
   const known = new Set(rows.map((r) => r.match_id));
 
-  let recorded = 0;
+  const recorded = [];
   for (const matchId of ids) {
     if (known.has(matchId)) continue;
 
@@ -72,7 +74,7 @@ export async function syncPlayerHistory(puuid, userId, count) {
     if (!p) continue;
 
     await recordMatch(matchId, puuid, userId, p);
-    recorded += 1;
+    recorded.push({ matchId, ...p });
   }
   return recorded;
 }

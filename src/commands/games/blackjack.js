@@ -145,11 +145,12 @@ export async function execute(interaction) {
       embeds: [finishedEmbed(res.game, res.result, res.newBalance)],
     });
     // The 'blackjack' trigger fires on game RESOLUTION (either path);
-    // hand size rides along for the future five-card-win check.
+    // hand size feeds the five-card-win check.
     const earned = await checkAchievements(interaction.guildId, interaction.user.id, 'blackjack', {
       bet: res.game.bet,
       result: res.result,
       playerCards: res.game.playerHand.length,
+      newBalance: res.newBalance,
     });
     await announceAchievements(interaction, earned);
     return;
@@ -197,6 +198,7 @@ export async function handleButton(interaction) {
       bet: res.game.bet,
       result: res.result,
       playerCards: res.game.playerHand.length,
+      newBalance: res.newBalance,
     });
     await announceAchievements(interaction, earned);
   } else {

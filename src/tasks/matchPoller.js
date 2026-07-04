@@ -28,6 +28,8 @@ import {
   voidMatch,
 } from '../database/lolBets.js';
 import { ensureWelcomeBonus } from '../database/economy.js';
+import { checkAchievements } from '../database/achievements.js';
+import { announceToChannel } from '../lib/achievements.js';
 import { getActiveGame, getRecentMatchIds, getMatch, riotAvailable } from '../lib/riot.js';
 import { syncPlayerHistory } from '../database/lolHistory.js';
 import { LOL, formatCurrency } from '../config.js';
@@ -75,12 +77,22 @@ async function pollOnce() {
   }
 }
 
-// Records any unseen recent matches for every linked account.
+// Records any unseen recent matches for every linked account, then runs
+// match-based achievement checks on exactly the new rows (batched per
+// player). Awards are per-guild, so each configured guild checks and
+// announces independently (friends-server assumption, same as detection).
 async function syncAllHistory() {
   const links = await getAllLinks();
+  const guilds = await getConfiguredGuilds();
   for (const link of links) {
     try {
-      await syncPlayerHistory(link.puuid, link.user_id, LOL.historyFetchCount);
+      const newMatches = await syncPlayerHistory(link.puuid, link.user_id, LOL.historyFetchCount);
+      for (const g of guilds) {
+        for (const match of newMatches) {
+          const earned = await checkAchievements(g.guild_id, link.user_id, 'lol_match', match);
+          await announceToChannel(clientRef, g.lol_channel_id, `<@${link.user_id}>`, earned);
+        }
+      }
     } catch (err) {
       console.error(`History sync error for ${link.game_name}:`, err.message);
     }
@@ -264,6 +276,18 @@ async function checkTrackedMatches() {
       color: result.won ? 0x2ecc71 : 0xe74c3c,
       line: `${outcome} for ${names}${result.kda ? ` (${result.kda})` : ''}\n${betLine}`,
     });
+
+    // Bet achievements for every bettor, right or wrong (cold streaks
+    // count too). No interaction exists out here, so announcements go
+    // to the match's own channel.
+    for (const bettor of s.bettors ?? []) {
+      const earned = await checkAchievements(match.guild_id, bettor.userId, 'lolbet', {
+        correct: bettor.correct,
+        amount: bettor.amount,
+        onWin: bettor.onWin,
+      });
+      await announceToChannel(clientRef, match.channel_id, `<@${bettor.userId}>`, earned);
+    }
   }
 }
 

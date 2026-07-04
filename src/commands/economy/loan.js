@@ -7,6 +7,8 @@
 import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
 import { borrow, repay, getLoanStatus } from '../../database/loans.js';
 import { ensureWelcomeBonus, getBalance } from '../../database/economy.js';
+import { checkAchievements } from '../../database/achievements.js';
+import { announceAchievements } from '../../lib/achievements.js';
 import { formatCurrency, LOAN } from '../../config.js';
 
 export const data = new SlashCommandBuilder()
@@ -88,6 +90,15 @@ async function handleBorrow(interaction) {
         `New balance: ${formatCurrency(balance)}`,
     );
   await interaction.reply({ embeds: [embed] });
+
+  // Achievement checks after the loan committed. The limit rides along
+  // so the maxed-out-credit check can compare without a query.
+  const earned = await checkAchievements(interaction.guildId, interaction.user.id, 'loan', {
+    action: 'borrow',
+    amount: result.amount,
+    limit: result.limit,
+  });
+  await announceAchievements(interaction, earned);
 }
 
 // --- /loan repay ---
@@ -118,6 +129,14 @@ async function handleRepay(interaction) {
           : `Remaining debt: **${formatCurrency(result.owedRemaining)}**`),
     );
   await interaction.reply({ embeds: [embed] });
+
+  // Achievement checks after the repayment committed.
+  const earned = await checkAchievements(interaction.guildId, interaction.user.id, 'loan', {
+    action: 'repay',
+    paid: result.paid,
+    cleared: result.cleared,
+  });
+  await announceAchievements(interaction, earned);
 }
 
 // --- /loan status ---

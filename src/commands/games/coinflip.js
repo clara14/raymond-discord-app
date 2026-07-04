@@ -74,6 +74,7 @@ export async function execute(interaction) {
     guess,
     result: result.result,
     won: result.won,
+    newBalance: result.newBalance,
   });
   await announceAchievements(interaction, earned);
 }

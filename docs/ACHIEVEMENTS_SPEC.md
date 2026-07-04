@@ -1,8 +1,10 @@
 # Achievements System — Design Spec
 
-> **Status:** Phase 1 shipped 2026-07-03 (framework, user_achievements
-> table, getting-started set, /achievements command, contract tests).
-> Phases 2–4 pending.
+> **Status:** Phases 1–2 shipped 2026-07-03 (framework + full catalog of
+> 72, all command/poller wiring, fixture tests per check). Phase 3
+> (sweep + retroactive backfill + announce_channel_id) and phase 4
+> (lol_match_history stat columns) pending. Streak/serial checks are
+> event-carried for now; the sweep will add their query paths.
 
 Goal: a trophy system derived (almost) entirely from data the bot ALREADY
 records — the ledger, match history, wordle boards, blackjack games,

@@ -120,18 +120,22 @@ export function settleMatch(matchRowId, guildId, won) {
       [matchRowId],
     );
 
-    // Pay each correct bet double its stake.
+    // Pay each correct bet double its stake. `bettors` records every
+    // bet's outcome for the achievement checks after settlement.
     const winners = [];
+    const bettors = [];
     let totalWagered = 0;
     for (const bet of bets) {
       const amount = Number(bet.amount);
+      const correct = bet.on_win === won;
       totalWagered += amount;
-      if (bet.on_win === won) {
+      if (correct) {
         await insertLedger(client, guildId, bet.bettor_id, amount * 2, 'lol_bet_win', {
           match: matchRowId,
         });
         winners.push({ userId: bet.bettor_id, paid: amount * 2 });
       }
+      bettors.push({ userId: bet.bettor_id, amount, onWin: bet.on_win, correct });
     }
 
     await client.query(
@@ -141,7 +145,7 @@ export function settleMatch(matchRowId, guildId, won) {
       [matchRowId, won],
     );
 
-    return { settled: true, bets: bets.length, totalWagered, winners };
+    return { settled: true, bets: bets.length, totalWagered, winners, bettors };
   });
 }
 

@@ -8,6 +8,8 @@
 import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
 import { burn, ensureWelcomeBonus } from '../../database/economy.js';
 import { chatCompletion } from '../../lib/anthropic.js';
+import { checkAchievements } from '../../database/achievements.js';
+import { announceAchievements } from '../../lib/achievements.js';
 import { BRIBE, formatCurrency } from '../../config.js';
 
 export const data = new SlashCommandBuilder()
@@ -122,4 +124,11 @@ export async function execute(interaction) {
     });
 
   await interaction.editReply({ embeds: [embed] });
+
+  // Achievement checks after the burn committed and the show went on.
+  const earned = await checkAchievements(interaction.guildId, interaction.user.id, 'bribe', {
+    kind: sub,
+    price,
+  });
+  await announceAchievements(interaction, earned);
 }

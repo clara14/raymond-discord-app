@@ -6,8 +6,19 @@
 // src/data/achievements.js.
 // ============================================================
 
-import { query } from './db.js';
+import { pool, query } from './db.js';
+import { ledgerBalance } from './tx.js';
+import { bankedBalance } from './bank.js';
 import { ACHIEVEMENTS } from '../data/achievements.js';
+
+// Ledger types that make up a gambling career. Bets and their payouts
+// net against each other; refunds cancel voided bets. Wordle is a reward,
+// not a wager, so it stays out.
+const GAMBLING_TYPES = [
+  'coinflip', 'slots',
+  'blackjack_bet', 'blackjack_win', 'blackjack_push',
+  'lol_bet', 'lol_bet_win', 'lol_bet_refund',
+];
 
 /**
  * Records one earned achievement. Idempotent by construction: the
@@ -28,13 +39,225 @@ export async function awardAchievement(guildId, userId, achievementId) {
 
 /**
  * Builds the `queries` half of a check's ctx — targeted aggregate
- * lookups a check can call when the event alone can't answer it.
- * Phase 1's checks are all event-only, so this is an empty seam;
- * phase 2/3 grow it (lifetime counts, streak reads, worth queries...)
- * and tests inject a fake in its place.
+ * lookups a check calls when the event alone can't answer it. Everything
+ * here is lazy: nothing runs unless a subscribed check actually calls it,
+ * so a trigger that only fires event-carried checks costs zero queries.
+ * Tests inject a plain-object fake in place of this whole thing.
  */
 export function makeQueries(guildId, userId) {
-  return {};
+  return {
+    /** Wallet right now (the usual derived SUM). */
+    walletBalance: () => ledgerBalance(pool, guildId, userId),
+
+    /** Banked total right now. */
+    bankedBalance: () => bankedBalance(pool, guildId, userId),
+
+    /** Wallet + banked — the worth-tier checks' input. */
+    totalWorth: async () =>
+      (await ledgerBalance(pool, guildId, userId)) +
+      (await bankedBalance(pool, guildId, userId)),
+
+    /** Lifetime positive /daily + /work earnings (credit-limit rule's input). */
+    lifetimeEarned: async () => {
+      const { rows } = await query(
+        `SELECT COALESCE(SUM(amount), 0)::bigint AS earned
+         FROM transactions
+         WHERE guild_id = $1 AND user_id = $2
+           AND type IN ('daily', 'work') AND amount > 0`,
+        [guildId, userId],
+      );
+      return Number(rows[0].earned);
+    },
+
+    /** How many ledger rows of one type the user has (lifetime counters). */
+    countType: async (type) => {
+      const { rows } = await query(
+        `SELECT COUNT(*)::int AS n FROM transactions
+         WHERE guild_id = $1 AND user_id = $2 AND type = $3`,
+        [guildId, userId, type],
+      );
+      return rows[0].n;
+    },
+
+    /** Same, but only rows from today (DB clock — consistent everywhere). */
+    countTodayType: async (type) => {
+      const { rows } = await query(
+        `SELECT COUNT(*)::int AS n FROM transactions
+         WHERE guild_id = $1 AND user_id = $2 AND type = $3
+           AND created_at::date = CURRENT_DATE`,
+        [guildId, userId, type],
+      );
+      return rows[0].n;
+    },
+
+    /** Total monies sent to others (pay + gift are negative rows; flip the sign). */
+    sumGivenAway: async () => {
+      const { rows } = await query(
+        `SELECT COALESCE(-SUM(amount), 0)::bigint AS given
+         FROM transactions
+         WHERE guild_id = $1 AND user_id = $2
+           AND type IN ('pay_sent', 'gift_sent')`,
+        [guildId, userId],
+      );
+      return Number(rows[0].given);
+    },
+
+    /** How many DISTINCT bribe kinds the user has paid for. */
+    bribeKinds: async () => {
+      const { rows } = await query(
+        `SELECT COUNT(DISTINCT metadata->>'kind')::int AS n
+         FROM transactions
+         WHERE guild_id = $1 AND user_id = $2 AND type = 'bribe'`,
+        [guildId, userId],
+      );
+      return rows[0].n;
+    },
+
+    /** Net over all gambling types — positive means the house is losing. */
+    gamblingNet: async () => {
+      const { rows } = await query(
+        `SELECT COALESCE(SUM(amount), 0)::bigint AS net
+         FROM transactions
+         WHERE guild_id = $1 AND user_id = $2 AND type = ANY($3)`,
+        [guildId, userId, GAMBLING_TYPES],
+      );
+      return Number(rows[0].net);
+    },
+
+    /** The signed amounts of the user's last N rows of a type, newest first. */
+    lastNets: async (type, n) => {
+      const { rows } = await query(
+        `SELECT amount::bigint AS amount FROM transactions
+         WHERE guild_id = $1 AND user_id = $2 AND type = $3
+         ORDER BY id DESC LIMIT $4`,
+        [guildId, userId, type, n],
+      );
+      return rows.map((r) => Number(r.amount));
+    },
+
+    /** won/lost booleans of the last N coinflips, newest first. */
+    lastCoinflipResults: async (n) => {
+      const { rows } = await query(
+        `SELECT (metadata->>'won')::boolean AS won FROM transactions
+         WHERE guild_id = $1 AND user_id = $2 AND type = 'coinflip'
+         ORDER BY id DESC LIMIT $3`,
+        [guildId, userId, n],
+      );
+      return rows.map((r) => r.won);
+    },
+
+    /** Successful robberies of one specific victim (metadata carries who). */
+    countRobsFrom: async (victimId) => {
+      const { rows } = await query(
+        `SELECT COUNT(*)::int AS n FROM transactions
+         WHERE guild_id = $1 AND user_id = $2 AND type = 'rob_steal'
+           AND metadata->>'from' = $3`,
+        [guildId, userId, victimId],
+      );
+      return rows[0].n;
+    },
+
+    /**
+     * The user's record AS A VICTIM: attempts against them (successful
+     * hits + damages collected from failures) and how many succeeded.
+     * One FILTER-ed pass, same trick as the profile stats.
+     */
+    victimRecord: async () => {
+      const { rows } = await query(
+        `SELECT
+           COUNT(*) FILTER (WHERE type = 'rob_victim')::int  AS times_robbed,
+           COUNT(*) FILTER (WHERE type = 'rob_damages')::int AS damages_collected
+         FROM transactions
+         WHERE guild_id = $1 AND user_id = $2`,
+        [guildId, userId],
+      );
+      return {
+        timesRobbed: rows[0].times_robbed,
+        attemptsOnMe: rows[0].times_robbed + rows[0].damages_collected,
+      };
+    },
+
+    /** Lifetime wordle solves in this guild. */
+    countWordleSolves: async () => {
+      const { rows } = await query(
+        `SELECT COUNT(*)::int AS n FROM wordle_games
+         WHERE guild_id = $1 AND user_id = $2 AND solved`,
+        [guildId, userId],
+      );
+      return rows[0].n;
+    },
+
+    /** How many facts exist ABOUT this user (the Local Legend input). */
+    countFactsAboutMe: async () => {
+      const { rows } = await query(
+        `SELECT COUNT(*)::int AS n FROM user_facts
+         WHERE guild_id = $1 AND user_id = $2`,
+        [guildId, userId],
+      );
+      return rows[0].n;
+    },
+
+    /** How many achievements the user holds (the completionist input). */
+    countAchievements: async () => {
+      const { rows } = await query(
+        `SELECT COUNT(*)::int AS n FROM user_achievements
+         WHERE guild_id = $1 AND user_id = $2`,
+        [guildId, userId],
+      );
+      return rows[0].n;
+    },
+
+    // --- LoL lookups. Match history is keyed by puuid, not guild, so
+    // these resolve the user's link with a join — guild-independent by
+    // design (the same games count in every configured guild). ---
+
+    /** win/loss booleans of the last N recorded games, newest first. */
+    lolLastResults: async (n) => {
+      const { rows } = await query(
+        `SELECT h.win FROM lol_match_history h
+         JOIN linked_accounts l ON l.puuid = h.puuid
+         WHERE l.user_id = $1
+         ORDER BY h.ended_at DESC LIMIT $2`,
+        [userId, n],
+      );
+      return rows.map((r) => r.win);
+    },
+
+    /** Total recorded games for the user's linked account. */
+    lolGameCount: async () => {
+      const { rows } = await query(
+        `SELECT COUNT(*)::int AS n FROM lol_match_history h
+         JOIN linked_accounts l ON l.puuid = h.puuid
+         WHERE l.user_id = $1`,
+        [userId],
+      );
+      return rows[0].n;
+    },
+
+    /** Recorded games in one queue (420 solo, 450 ARAM, ...). */
+    lolQueueCount: async (queueId) => {
+      const { rows } = await query(
+        `SELECT COUNT(*)::int AS n FROM lol_match_history h
+         JOIN linked_accounts l ON l.puuid = h.puuid
+         WHERE l.user_id = $1 AND h.queue_id = $2`,
+        [userId, queueId],
+      );
+      return rows[0].n;
+    },
+
+    /** correct/incorrect booleans of the last N SETTLED bets, newest first. */
+    lastBetResults: async (n) => {
+      const { rows } = await query(
+        `SELECT (b.on_win = m.won) AS correct
+         FROM lol_bets b
+         JOIN lol_matches m ON m.id = b.match_row_id
+         WHERE b.bettor_id = $1 AND m.guild_id = $2 AND m.status = 'settled'
+         ORDER BY b.placed_at DESC LIMIT $3`,
+        [userId, guildId, n],
+      );
+      return rows.map((r) => r.correct);
+    },
+  };
 }
 
 /**
@@ -68,6 +291,14 @@ export async function checkAchievements(guildId, userId, trigger, event = null) 
       if (await awardAchievement(guildId, userId, def.id)) {
         earned.push(def);
       }
+    }
+
+    // The meta pass: earning anything may itself complete a
+    // completionist achievement. One recursive call with the 'meta'
+    // trigger — and the trigger guard stops it recursing further, even
+    // when the meta pass awards something.
+    if (earned.length > 0 && trigger !== 'meta') {
+      earned.push(...(await checkAchievements(guildId, userId, 'meta', null)));
     }
   } catch (err) {
     console.error('checkAchievements error:', err);

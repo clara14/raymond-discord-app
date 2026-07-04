@@ -5,6 +5,8 @@
 // ============================================================
 
 import { SlashCommandBuilder } from 'discord.js';
+import { checkAchievements } from '../../database/achievements.js';
+import { announceAchievements } from '../../lib/achievements.js';
 
 export const data = new SlashCommandBuilder()
   .setName('poll')
@@ -31,4 +33,11 @@ export async function execute(interaction) {
   // Add thumbs-up / thumbs-down as the voting buttons.
   await message.resource.message.react('👍');
   await message.resource.message.react('👎');
+
+  // Achievement check after the poll is up. (Polls leave no database
+  // trace, so this one is event-only — the sweep can't backfill it.)
+  const earned = await checkAchievements(interaction.guildId, interaction.user.id, 'poll', {
+    question,
+  });
+  await announceAchievements(interaction, earned);
 }

@@ -172,6 +172,9 @@ export function drawRaffle(guildId, rng = Math.random) {
     }
 
     const winnerId = pickWeightedWinner(entries, rng);
+    // The winner's own ticket count rides along for the underdog
+    // achievement (win share is tickets/pot at draw time).
+    const winnerTickets = entries.find((e) => e.userId === winnerId)?.tickets ?? 0;
 
     // Pot = the jar's ledger balance (the money truth), so the payout
     // empties the jar exactly.
@@ -191,6 +194,6 @@ export function drawRaffle(guildId, rng = Math.random) {
       [raffleId, winnerId],
     );
 
-    return { ok: true, winnerId, pot, entrants: entries.length };
+    return { ok: true, winnerId, pot, entrants: entries.length, winnerTickets };
   });
 }

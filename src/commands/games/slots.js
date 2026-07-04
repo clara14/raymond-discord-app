@@ -81,6 +81,7 @@ export async function execute(interaction) {
     reels: result.reels,
     multiplier: result.multiplier,
     net: result.net,
+    newBalance: result.newBalance,
   });
   await announceAchievements(interaction, earned);
 }

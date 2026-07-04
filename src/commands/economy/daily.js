@@ -69,6 +69,8 @@ export async function execute(interaction) {
   const earned = await checkAchievements(interaction.guildId, interaction.user.id, 'daily', {
     reward: result.reward,
     streak: result.streak,
+    garnished: garnish?.garnished ?? 0,
+    garnishCleared: garnish?.cleared ?? false,
   });
   await announceAchievements(interaction, earned);
 }

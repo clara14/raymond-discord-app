@@ -88,6 +88,10 @@ export async function execute(interaction) {
   await interaction.reply({ embeds: [embed] });
 
   // Fire achievement checks after the payout committed (never before).
-  const earned = await checkAchievements(guildId, user.id, 'work', { amount });
+  const earned = await checkAchievements(guildId, user.id, 'work', {
+    amount,
+    garnished: garnish?.garnished ?? 0,
+    garnishCleared: garnish?.cleared ?? false,
+  });
   await announceAchievements(interaction, earned);
 }

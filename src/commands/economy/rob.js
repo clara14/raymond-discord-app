@@ -9,6 +9,8 @@ import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
 import { attemptRob } from '../../database/robbery.js';
 import { ensureWelcomeBonus } from '../../database/economy.js';
 import { tryUseCooldown, peekCooldown } from '../../database/cooldowns.js';
+import { checkAchievements } from '../../database/achievements.js';
+import { announceAchievements } from '../../lib/achievements.js';
 import { ROB, formatCurrency, formatDuration } from '../../config.js';
 
 export const data = new SlashCommandBuilder()
@@ -106,4 +108,24 @@ export async function execute(interaction) {
         );
 
   await interaction.reply({ embeds: [embed] });
+
+  // Achievement checks for BOTH parties — robberies are two-sided events.
+  // Post-action wallets ride along so Rock Bottom is a zero-query check.
+  const robberEarned = await checkAchievements(guildId, robber.id, 'rob', {
+    success: result.success,
+    amount: result.amount,
+    penalty: result.penalty,
+    victim: victim.id,
+    newBalance: result.robberWallet,
+  });
+  await announceAchievements(interaction, robberEarned);
+
+  const victimEarned = await checkAchievements(guildId, victim.id, 'robbed', {
+    success: result.success,
+    amount: result.amount,
+    penalty: result.penalty,
+    newBalance: result.victimWallet,
+  });
+  // Credit the victim by mention — they didn't run the command.
+  await announceAchievements(interaction, victimEarned, `<@${victim.id}>`);
 }

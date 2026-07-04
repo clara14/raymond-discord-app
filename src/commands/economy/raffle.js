@@ -12,6 +12,8 @@ import {
 } from 'discord.js';
 import { enterRaffle, getRaffleStatus, drawRaffle } from '../../database/raffle.js';
 import { ensureWelcomeBonus } from '../../database/economy.js';
+import { checkAchievements } from '../../database/achievements.js';
+import { announceAchievements } from '../../lib/achievements.js';
 import { formatCurrency, RAFFLE } from '../../config.js';
 
 export const data = new SlashCommandBuilder()
@@ -96,6 +98,15 @@ async function handleEnter(interaction) {
     );
 
   await interaction.reply({ embeds: [embed] });
+
+  // Achievement checks after the entry committed (whale check reads the
+  // running per-round ticket total the entry returned).
+  const earned = await checkAchievements(interaction.guildId, interaction.user.id, 'raffle', {
+    amount,
+    userTickets: result.userTickets,
+    pot: result.pot,
+  });
+  await announceAchievements(interaction, earned);
 }
 
 // --- /raffle pot ---
@@ -159,4 +170,13 @@ async function handleDraw(interaction) {
 
   // Public announcement (not ephemeral) so the whole server sees it.
   await interaction.reply({ embeds: [embed] });
+
+  // Achievement checks for the WINNER — a mod ran the command, so the
+  // announcement credits the winner by mention instead.
+  const earned = await checkAchievements(interaction.guildId, result.winnerId, 'raffle_win', {
+    tickets: result.winnerTickets,
+    pot: result.pot,
+    entrants: result.entrants,
+  });
+  await announceAchievements(interaction, earned, `<@${result.winnerId}>`);
 }

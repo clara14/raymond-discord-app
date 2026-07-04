@@ -10,6 +10,8 @@ import {
   MessageFlags,
 } from 'discord.js';
 import { query } from '../../database/db.js'; // Shared DB helper
+import { checkAchievements } from '../../database/achievements.js';
+import { announceAchievements } from '../../lib/achievements.js';
 
 export const data = new SlashCommandBuilder()
   .setName('warn')
@@ -62,4 +64,11 @@ export async function execute(interaction) {
     content: `⚠️ Warned **${target.tag}** (warning #${rows[0].id}).\nReason: ${reason}\nThey now have **${total}** warning(s).`,
     flags: MessageFlags.Ephemeral,
   });
+
+  // Achievement for the WARNED user. Deliberately a public follow-up
+  // even though the warning itself is ephemeral — "Seen the Mod Side" is
+  // friendly-server comedy, and it reveals only that a warning happened,
+  // not the reason.
+  const earned = await checkAchievements(interaction.guildId, target.id, 'warn', {});
+  await announceAchievements(interaction, earned, `<@${target.id}>`);
 }

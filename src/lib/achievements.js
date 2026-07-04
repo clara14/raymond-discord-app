@@ -1,9 +1,9 @@
 // ============================================================
 // achievements.js (lib) — Announcement rendering for earned
-// achievements: the embed builder (pure, unit-tested) and the
+// achievements: the embed builder (pure, unit-tested), the
 // interaction follow-up helper commands call after wiring in
-// checkAchievements. Background/sweep announcements come in
-// phase 3 and will reuse the same embed builder.
+// checkAchievements, and the channel announcer used by
+// background earners (match poller settlements/history sync).
 // ============================================================
 
 import { EmbedBuilder } from 'discord.js';
@@ -39,11 +39,33 @@ export function achievementEmbed(displayName, earned) {
  * award is already saved and shows in /achievements regardless.
  * Follow-ups are public even when the original reply was ephemeral,
  * which is exactly what we want: the flex is the announcement.
+ *
+ * `displayName` overrides who the trophy is credited to — for awards
+ * where the earner isn't the person who ran the command (the raffle
+ * winner on a mod's /raffle draw, the victim of a /rob). A user mention
+ * string like `<@id>` works too; Discord renders it inside embeds.
  */
-export async function announceAchievements(interaction, earned) {
+export async function announceAchievements(interaction, earned, displayName = null) {
   if (!earned || earned.length === 0) return;
-  const name = interaction.user.displayName ?? interaction.user.username;
+  const name =
+    displayName ?? interaction.user.displayName ?? interaction.user.username;
   await interaction
     .followUp({ embeds: [achievementEmbed(name, earned)] })
     .catch(() => {});
+}
+
+/**
+ * Background counterpart: posts the announcement straight to a channel,
+ * for achievements earned with no interaction to follow up on (bet
+ * settlements, match-history sync — and the phase-3 sweep). Same
+ * swallow-everything contract: the award is already durable.
+ */
+export async function announceToChannel(client, channelId, displayName, earned) {
+  if (!earned || earned.length === 0 || !channelId) return;
+  try {
+    const channel = await client.channels.fetch(channelId);
+    await channel.send({ embeds: [achievementEmbed(displayName, earned)] });
+  } catch (err) {
+    console.error('Achievement channel announce error:', err.message);
+  }
 }

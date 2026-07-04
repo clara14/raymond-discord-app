@@ -89,12 +89,15 @@ async function handleAdd(interaction) {
     `🧠 Noted (fact #${result.id}): **${target.username}** — "${fact}"\nThe bot will remember this in chat.`,
   );
 
-  // Achievement check for the TEACHER (facts-about-you checks for the
-  // subject come with the phase 2 catalog).
+  // Achievement checks for BOTH sides of a fact: the teacher ('fact')
+  // and the person now one fact closer to Local Legend ('fact_about').
   const earned = await checkAchievements(interaction.guildId, interaction.user.id, 'fact', {
     about: target.id,
   });
   await announceAchievements(interaction, earned);
+
+  const aboutEarned = await checkAchievements(interaction.guildId, target.id, 'fact_about', {});
+  await announceAchievements(interaction, aboutEarned, `<@${target.id}>`);
 }
 
 // --- /fact list ---
