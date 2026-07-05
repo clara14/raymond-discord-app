@@ -39,7 +39,7 @@ Check items off as they're built; add new ideas at will.
 ## Server quality-of-life
 - [x] Birthday tracking + announcements
 - [ ] Quote board (/quote to immortalize dumb messages)
-- [ ] /remindme reminders
+- [x] /remindme reminders
 - [ ] Richer moderation: mute, purge, audit log
 
 ## Shelved (code preserved, see docs/shelved/)

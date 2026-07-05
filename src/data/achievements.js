@@ -57,6 +57,8 @@ export const TRIGGERS = new Set([
   'lol_match',  // a new match landed in lol_match_history (event: the row)
   'birthday_set', // /birthday set succeeded
   'birthday',   // the daily job celebrated this user (event: year)
+  'reminder',   // /remindme in succeeded (event: durationSec)
+  'reminder_delivered', // the scheduler delivered one of this user's reminders
   'meta',       // fired by the runner itself after any award (completionists)
 ]);
 
@@ -525,6 +527,21 @@ export const ACHIEVEMENTS = [
     triggers: ['pay', 'gift'],
     check: async ({ event, queries }) =>
       event ? queries.isUsersBirthdayToday(event.to) : false },
+  { id: 'first_reminder', name: 'Object Permanence', emoji: '⏰', tier: 'common', secret: false,
+    description: 'Set your first reminder.',
+    triggers: ['reminder'],
+    check: firstOf((q) => q.hasReminderEver()) },
+  { id: 'reminder_veteran', name: 'Externalized Memory', emoji: '🧠', tier: 'uncommon', secret: false,
+    description: 'Have 25 reminders delivered.',
+    triggers: ['reminder_delivered'],
+    check: async ({ queries }) => (await queries.countDeliveredReminders()) >= 25 },
+  { id: 'reminder_year', name: 'See You Next Year', emoji: '📅', tier: 'rare', secret: true,
+    description: 'Set a reminder at least 180 days out.',
+    triggers: ['reminder'],
+    check: async ({ event, queries }) =>
+      event
+        ? (event.durationSec ?? 0) >= 180 * 86_400
+        : queries.hasLongReminder(180) },
   { id: 'completionist_25', name: 'Trophy Hunter', emoji: '🏆', tier: 'epic', secret: false,
     description: 'Earn 25 achievements.',
     triggers: ['meta'], check: achievementsAtLeast(25) },

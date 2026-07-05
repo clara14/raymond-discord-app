@@ -309,6 +309,13 @@ const CASES = [
   ['birthday_generous', { event: { to: 'u3' },
     queries: { isUsersBirthdayToday: async (u) => u === 'u2' } }, false],
 
+  // Reminders.
+  ['first_reminder', { event: { durationSec: 600 } }, true],
+  ['reminder_veteran', { queries: { countDeliveredReminders: async () => 25 } }, true],
+  ['reminder_veteran', { queries: { countDeliveredReminders: async () => 24 } }, false],
+  ['reminder_year', { event: { durationSec: 180 * 86_400 } }, true],
+  ['reminder_year', { event: { durationSec: 180 * 86_400 - 1 } }, false],
+
   // Meta & social.
   ['facts_about_you_5', { queries: { countFactsAboutMe: async () => 5 } }, true],
   ['facts_about_you_5', { queries: { countFactsAboutMe: async () => 4 } }, false],
@@ -375,6 +382,8 @@ const SWEEP_CASES = [
   ['birthday_set',        { hasBirthdaySet: async () => true }, true],
   ['birthday_celebrated', { countType: async (t) => (t === 'birthday' ? 1 : 0) }, true],
   ['birthday_generous',   {}, false], // moment-only: sweep must never grant it
+  ['first_reminder',  { hasReminderEver: async () => true }, true],
+  ['reminder_year',   { hasLongReminder: async (d) => d === 180 }, true],
 ];
 
 test('every catalog check answers its fixtures correctly', async () => {
@@ -446,6 +455,9 @@ const BLANK_USER_QUERIES = {
   hasWarning: async () => false,
   hasBirthdaySet: async () => false,
   isUsersBirthdayToday: async () => false,
+  hasReminderEver: async () => false,
+  countDeliveredReminders: async () => 0,
+  hasLongReminder: async () => false,
 };
 
 test('SWEEP SAFETY: a blank user earns NOTHING from a null-event pass', async () => {

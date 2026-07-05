@@ -1,5 +1,13 @@
 # /remindme — Design Spec
 
+> **Status:** Shipped 2026-07-04 — schema + partial index, parseDuration
+> (heaviest test table in the suite), /remindme in|list|cancel, the 30s
+> scheduler with FOR UPDATE SKIP LOCKED + DM fallback + late apology,
+> owner-only allowedMentions, and all three achievements. One deliberate
+> divergence: the daily cleanup SCRUBS old delivered messages instead of
+> deleting rows, because reminder_veteran counts lifetime deliveries and
+> row deletion would silently reset it.
+
 Goal: `/remindme in 2h check the oven` → two hours later the bot pings
 you with your message. Small surface, but the engineering is a proper
 **durable job queue**: reminders must survive restarts, fire on time-ish,

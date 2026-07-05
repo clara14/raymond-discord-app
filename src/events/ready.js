@@ -9,6 +9,9 @@ import { startMatchPoller, handleButton, handleModal } from '../tasks/matchPolle
 import { startAchievementSweep } from '../tasks/achievementSweep.js';
 import { registerDailyJob, startDailyTasks } from '../tasks/dailyTasks.js';
 import { initBirthdayJob, runBirthdayJob } from '../tasks/birthdayJob.js';
+import { startReminderScheduler } from '../tasks/reminderScheduler.js';
+import { cleanupDelivered } from '../database/reminders.js';
+import { REMINDERS } from '../config.js';
 
 // The Discord event this file handles.
 export const name = Events.ClientReady;
@@ -34,5 +37,11 @@ export function execute(client) {
   // the first tenant; future daily rituals register right here.
   initBirthdayJob(client);
   registerDailyJob('birthdays', runBirthdayJob);
+  registerDailyJob('reminder-cleanup', () =>
+    cleanupDelivered(REMINDERS.cleanupAfterDays),
+  );
   startDailyTasks();
+
+  // The reminder delivery loop (30s poll over the durable queue).
+  startReminderScheduler(client);
 }

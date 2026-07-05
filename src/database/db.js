@@ -421,6 +421,33 @@ export async function initDatabase() {
     );
   `);
 
+  // --- Reminders: a durable job queue ---
+  // The table IS the scheduler's state: a restart recovers nothing
+  // because there's nothing to recover — pending rows are simply still
+  // pending. delivered_at doubles as the status flag (null = pending);
+  // delivered rows are kept for a while (history is cheap) and purged
+  // by a daily cleanup job.
+  await query(`
+    CREATE TABLE IF NOT EXISTS reminders (
+      id           BIGSERIAL PRIMARY KEY,
+      guild_id     TEXT NOT NULL,
+      channel_id   TEXT NOT NULL,            -- where to deliver
+      user_id      TEXT NOT NULL,
+      message      TEXT NOT NULL,            -- max length enforced by the option
+      remind_at    TIMESTAMPTZ NOT NULL,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+      delivered_at TIMESTAMPTZ               -- null = pending
+    );
+  `);
+
+  // The scheduler's only question is "what's due and undelivered?" —
+  // a partial index answers exactly that and nothing else, and stays
+  // tiny no matter how much delivered history accumulates.
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_reminders_due
+    ON reminders (remind_at) WHERE delivered_at IS NULL;
+  `);
+
   // --- Achievements: earned trophies ---
   // The CATALOG (names, tiers, check functions) lives in code —
   // src/data/achievements.js — so adding an achievement never needs a

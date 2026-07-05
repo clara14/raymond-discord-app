@@ -537,6 +537,40 @@ export function makeQueries(guildId, userId) {
       return isCelebrationDay(r.month, r.day, { year: r.y, month: r.m, day: r.d });
     },
 
+    /** Ever set a reminder? (Reminders are guild-scoped rows.) */
+    hasReminderEver: async () => {
+      const { rows } = await query(
+        `SELECT EXISTS (
+           SELECT 1 FROM reminders WHERE guild_id = $1 AND user_id = $2
+         ) AS yes`,
+        [guildId, userId],
+      );
+      return rows[0].yes;
+    },
+
+    /** Lifetime DELIVERED reminders (cleanup prunes old rows — see note). */
+    countDeliveredReminders: async () => {
+      const { rows } = await query(
+        `SELECT COUNT(*)::int AS n FROM reminders
+         WHERE guild_id = $1 AND user_id = $2 AND delivered_at IS NOT NULL`,
+        [guildId, userId],
+      );
+      return rows[0].n;
+    },
+
+    /** Ever set a reminder at least N days out? */
+    hasLongReminder: async (days) => {
+      const { rows } = await query(
+        `SELECT EXISTS (
+           SELECT 1 FROM reminders
+           WHERE guild_id = $1 AND user_id = $2
+             AND remind_at - created_at >= make_interval(days => $3)
+         ) AS yes`,
+        [guildId, userId, days],
+      );
+      return rows[0].yes;
+    },
+
     /** Any warning on record (the sweep path for 'warned'). */
     hasWarning: async () => {
       const { rows } = await query(

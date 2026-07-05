@@ -255,6 +255,30 @@ erDiagram
     }
 ```
 
+## Reminders
+
+A durable job queue: the table IS the scheduler's state, so restarts
+recover nothing because nothing is lost. `delivered_at` doubles as the
+status flag (null = pending). The scheduler claims due rows with
+`FOR UPDATE SKIP LOCKED` (two pollers would skip each other's claims)
+and stamps delivery AFTER the send — at-least-once beats silently-never.
+The daily cleanup scrubs old delivered MESSAGES but keeps the skeletal
+rows so lifetime delivery counts stay true.
+
+```mermaid
+erDiagram
+    reminders {
+        bigserial id PK
+        text guild_id
+        text channel_id "where to deliver (DM fallback)"
+        text user_id
+        text message "scrubbed 30 days after delivery"
+        timestamptz remind_at "computed by the DB clock"
+        timestamptz created_at
+        timestamptz delivered_at "null = pending"
+    }
+```
+
 ## Achievements
 
 The catalog (names, tiers, check functions) lives in code —
@@ -282,6 +306,7 @@ erDiagram
 | `(channel_id, created_at DESC)` | chat_messages | "newest N in this channel" |
 | `(puuid, ended_at DESC)` | lol_match_history | "this player's games, newest first" |
 | `(status)` | lol_matches | the poller's live-match watchlist |
+| **partial** `(remind_at) WHERE delivered_at IS NULL` | reminders | "what's due and undelivered" — the scheduler's only question |
 | **unique** `(guild_id, riot_game_id)` | lol_matches | idempotent match detection |
 | **partial unique** `(guild_id) WHERE status='open'` | raffles | one open raffle per guild |
 | **partial unique** `(guild_id, user_id) WHERE status='active'` | blackjack_games, loans | one active game/loan per user |

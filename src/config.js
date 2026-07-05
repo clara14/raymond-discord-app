@@ -202,6 +202,18 @@ export const BIRTHDAY = {
   roleId: null,
 };
 
+// Reminders (/remindme). Durations are parsed by lib/duration.js; these
+// are the policy knobs around it.
+export const REMINDERS = {
+  minSec: 60,               // shortest allowed — keeps it from being a spam machine
+  maxSec: 365 * 86_400,     // longest allowed — one year out
+  maxPending: 15,           // per-user cap on undelivered reminders
+  pollIntervalSec: 30,      // scheduler cadence (worst case = this much late)
+  batchLimit: 25,           // max deliveries per poll cycle
+  lateAfterSec: 300,        // owe an apology when delivered more than 5 min late
+  cleanupAfterDays: 30,     // delivered rows older than this get purged daily
+};
+
 // Achievement sweep: the slow background pass that re-checks every
 // aggregate achievement per active user. Catches anything the event path
 // missed and grants new catalog entries retroactively (self-healing).

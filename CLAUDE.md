@@ -106,13 +106,18 @@ sessions in Claude chat; this file transfers that accumulated knowledge.
 - The AI chat's tools resolve usernames via a per-conversation nameMap;
   chat_messages.user_id exists for this.
 
-## Current state (28 commands)
+## Current state (29 commands)
 
 economy: audit (mod-gated), balance, bank, bribe, daily, gift, leaderboard,
 loan, pay, profile, raffle, rob, work · games: blackjack, coinflip, slots,
 wordle · lol: history, link, lolchannel, lolstats · moderation: warn ·
 utility: achievements, announcechannel (mod-gated), birthday, fact, ping,
-poll
+poll, remindme
+
+Reminders: a durable job queue — the reminders table IS the state;
+30s poller claims due rows FOR UPDATE SKIP LOCKED, DM fallback, marks
+delivered AFTER send (at-least-once). Delivery pings ONLY the owner via
+allowedMentions regardless of stored message content.
 
 Birthdays: self-declared only; celebrated at DB midnight (Feb 29 → Mar 1
 in non-leap years); gift is a normal ledger row (type 'birthday');
