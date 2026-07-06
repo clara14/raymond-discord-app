@@ -77,6 +77,16 @@ export async function execute(interaction) {
         name: 'Gambling ROI',
         value: roiLines.length > 0 ? roiLines.join('\n') : 'You\'ve never gambled. Statistically optimal; spiritually questionable.',
       },
+      // Risk profile: bets measured against the wallet AT THE TIME of
+      // each bet (the running-balance window in analytics.js).
+      ...(p.riskProfile
+        ? [{
+            name: 'Risk profile',
+            value:
+              `Average bet: **${p.riskProfile.avgPct.toFixed(1)}%** of your wallet at the time ` +
+              `(boldest: ${p.riskProfile.maxPct.toFixed(0)}%, over ${p.riskProfile.bets} bets).`,
+          }]
+        : []),
       ...(outgoings.length > 0 ? [{ name: 'Outgoings', value: outgoings.join('\n') }] : []),
       ...(robActive
         ? [{

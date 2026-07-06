@@ -123,6 +123,10 @@ src/lib/charts.js (@napi-rs/canvas; EXACTLY two functions, time series
 + bar — resist a framework) with sparkline fallback when rendering
 fails. Wealth/compare/economy attach charts; single-series charts get
 area fill, multi-series stay lines-only (overlap turns to mud).
+/economy has report|insights|trend subcommands (mobility, corr() with
+small-n caveats, hoarding gap, weekly-gini + jar charts); /mystats has
+the risk profile; the AI chat's get_economy_analytics tool feeds it
+macro stats for roasting.
 
 Reminders: a durable job queue — the reminders table IS the state;
 30s poller claims due rows FOR UPDATE SKIP LOCKED, DM fallback, marks

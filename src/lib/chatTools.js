@@ -9,6 +9,14 @@ import { getProfile } from '../database/stats.js';
 import { getLeaderboard } from '../database/economy.js';
 import { getLink } from '../database/linkedAccounts.js';
 import { getStats, getHistory } from '../database/lolHistory.js';
+import {
+  moneySupply,
+  flowWindow,
+  worthByUser,
+  houseReport,
+  wealthMobility,
+} from '../database/analytics.js';
+import { gini } from './gini.js';
 
 // Tool schemas in the Anthropic Messages API format. The descriptions are
 // written FOR THE MODEL — they're how it decides when to call what.
@@ -52,6 +60,16 @@ export const CHAT_TOOLS = [
     description:
       'Get the server\'s top 5 richest members (total worth including banked monies). ' +
       'Use for questions about who is richest or how people compare.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'get_economy_analytics',
+    description:
+      'Get the server\'s macroeconomic picture: total money supply, inflation ' +
+      '(minted vs burned this week), the gini inequality coefficient, the biggest ' +
+      'wealth climber and faller of the month, and how each casino game is paying ' +
+      'out vs its design. Use when the economy itself, inflation, inequality, or ' +
+      '"who\'s been winning lately" comes up — and roast with the numbers.',
     input_schema: { type: 'object', properties: {} },
   },
 ];
@@ -134,6 +152,45 @@ export function makeToolExecutor(ctx) {
           total_worth: e.balance,
         })),
       );
+    }
+
+    if (name === 'get_economy_analytics') {
+      const [supply, flow, worths, house, mobility] = await Promise.all([
+        moneySupply(guildId),
+        flowWindow(guildId, 7),
+        worthByUser(guildId),
+        houseReport(guildId),
+        wealthMobility(guildId, 30),
+      ]);
+
+      const idToName = new Map([...nameMap].map(([n, id]) => [id, n]));
+      const nameOf = (id) => idToName.get(id) ?? 'someone not in this chat';
+
+      // Biggest mover by rank shift (deltas break ties) — same sort as
+      // /economy insights.
+      const movers = [...mobility].sort(
+        (a, b) => b.rankShift - a.rankShift || b.delta - a.delta,
+      );
+      const climber = movers[0];
+      const faller = movers[movers.length - 1];
+
+      return JSON.stringify({
+        money_supply: supply.total,
+        minted_this_week: flow.minted,
+        burned_this_week: flow.burned,
+        inflation_note:
+          flow.minted > flow.burned ? 'supply growing' : 'supply shrinking',
+        gini_inequality: Number(gini(worths.map((w) => w.worth)).toFixed(2)),
+        biggest_climber_30d: climber
+          ? { name: nameOf(climber.userId), rank_change: `#${climber.rankThen} -> #${climber.rankNow}`, gained: climber.delta }
+          : null,
+        biggest_faller_30d: faller && faller !== climber
+          ? { name: nameOf(faller.userId), rank_change: `#${faller.rankThen} -> #${faller.rankNow}`, lost: -faller.delta }
+          : null,
+        house_report: house
+          .filter((h) => h.observedPct !== null)
+          .map((h) => `${h.game}: paying ${h.observedPct.toFixed(1)}% vs ~${h.designedPct}% designed`),
+      });
     }
 
     return JSON.stringify({ error: `Unknown tool: ${name}` });

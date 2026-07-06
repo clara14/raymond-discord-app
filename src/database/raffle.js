@@ -15,8 +15,9 @@ import {
 } from './tx.js';
 
 // The pot's owner in the ledger. Discord user IDs are numeric strings, so
-// this non-numeric sentinel can never collide with a real user.
-const JAR_SENTINEL = '__raffle_jar__';
+// this non-numeric sentinel can never collide with a real user. Exported
+// for the analytics module's jar forensics.
+export const JAR_SENTINEL = '__raffle_jar__';
 
 /**
  * Picks a winner weighted by ticket count. Pure and deterministic given

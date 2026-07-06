@@ -12,7 +12,9 @@
 // ============================================================
 
 import { query } from './db.js';
+import { JAR_SENTINEL } from './raffle.js';
 import { typesInClass } from '../lib/ledgerTypes.js';
+import { gini } from '../lib/gini.js';
 
 // Sentinel "users" (non-numeric ids) — the raffle jar today. Excluded
 // from every per-person statistic; included in supply (escrow counts).
@@ -299,6 +301,7 @@ export async function personalReport(guildId, userId) {
   );
 
   return {
+    riskProfile: await riskProfile(guildId, userId),
     income: {
       daily: g('daily').credited,
       work: g('work').credited,
@@ -328,4 +331,207 @@ export async function personalReport(guildId, userId) {
       ? { day: biggestDay[0].day, net: Number(biggestDay[0].net) }
       : null,
   };
+}
+
+// ------------------------------------------------------------
+// Phase 4 — "the genuinely fancy (because PostgreSQL can)"
+// ------------------------------------------------------------
+
+/**
+ * Risk profile: each wager as a fraction of the WALLET at the moment of
+ * the bet, via the running-balance window joined to the wager rows.
+ * The bet comes from metadata for single-row games (coinflip/slots) and
+ * from the debit itself for bet-then-payout games. bal_before ≤ 0 rows
+ * are excluded (a bet can't exceed the wallet, so those are ordering
+ * artifacts within a transaction batch).
+ */
+export async function riskProfile(guildId, userId) {
+  const { rows } = await query(
+    `SELECT AVG(bet::numeric / bal_before)::float8 AS avg_frac,
+            MAX(bet::numeric / bal_before)::float8 AS max_frac,
+            COUNT(*)::int AS n
+     FROM (
+       SELECT COALESCE((metadata->>'bet')::bigint, -amount) AS bet,
+              type,
+              SUM(amount) OVER (ORDER BY id) - amount AS bal_before
+       FROM transactions
+       WHERE guild_id = $1 AND user_id = $2
+     ) x
+     WHERE type IN ('coinflip', 'slots', 'blackjack_bet', 'lol_bet')
+       AND bal_before > 0`,
+    [guildId, userId],
+  );
+  const r = rows[0];
+  return r.n > 0
+    ? { avgPct: r.avg_frac * 100, maxPct: r.max_frac * 100, bets: r.n }
+    : null;
+}
+
+/**
+ * Wealth mobility: everyone's rank now vs rank `days` ago (two RANK()
+ * passes over worth-then and worth-now). Positive rankShift = climbed.
+ */
+export async function wealthMobility(guildId, days = 30) {
+  const { rows } = await query(
+    `WITH now_w AS (
+       SELECT user_id,
+              (SUM(amount) FILTER (WHERE NOT (type = ANY($4))))::bigint AS w
+       FROM transactions
+       WHERE guild_id = $1 AND user_id ~ $2
+       GROUP BY user_id
+     ),
+     then_w AS (
+       SELECT user_id,
+              (SUM(amount) FILTER (WHERE NOT (type = ANY($4))))::bigint AS w
+       FROM transactions
+       WHERE guild_id = $1 AND user_id ~ $2
+         AND created_at <= now() - make_interval(days => $3)
+       GROUP BY user_id
+     )
+     SELECT n.user_id,
+            COALESCE(n.w, 0)::bigint AS now_w,
+            COALESCE(t.w, 0)::bigint AS then_w,
+            RANK() OVER (ORDER BY COALESCE(n.w, 0) DESC) AS rank_now,
+            RANK() OVER (ORDER BY COALESCE(t.w, 0) DESC) AS rank_then
+     FROM now_w n
+     LEFT JOIN then_w t ON t.user_id = n.user_id`,
+    [guildId, HUMAN_ID, days, INTERNAL],
+  );
+  return rows.map((r) => ({
+    userId: r.user_id,
+    worthNow: Number(r.now_w),
+    worthThen: Number(r.then_w),
+    delta: Number(r.now_w) - Number(r.then_w),
+    rankNow: Number(r.rank_now),
+    rankThen: Number(r.rank_then),
+    rankShift: Number(r.rank_then) - Number(r.rank_now), // + = climbed
+  }));
+}
+
+/**
+ * The inequality trend: gini per week over the guild's whole history.
+ * SQL assembles each week's per-user worth snapshot (cumulative rows up
+ * to that week's end); the tested pure gini() does the math. O(weeks ×
+ * rows) — a cross join a real system would cache, and exactly the kind
+ * of thing friend scale lets us not care about.
+ */
+export async function weeklyGini(guildId) {
+  const { rows } = await query(
+    `WITH bounds AS (
+       SELECT date_trunc('week', MIN(created_at)) AS start
+       FROM transactions WHERE guild_id = $1
+     ),
+     weeks AS (
+       SELECT generate_series((SELECT start FROM bounds), now(), interval '1 week') AS wk
+     )
+     SELECT (w.wk + interval '1 week')::date::text AS week,
+            array_agg(u.worth) AS worths
+     FROM weeks w
+     CROSS JOIN LATERAL (
+       SELECT user_id,
+              (SUM(amount) FILTER (WHERE NOT (type = ANY($3))))::bigint AS worth
+       FROM transactions
+       WHERE guild_id = $1 AND user_id ~ $2
+         AND created_at < w.wk + interval '1 week'
+       GROUP BY user_id
+     ) u
+     GROUP BY w.wk
+     ORDER BY w.wk`,
+    [guildId, HUMAN_ID, INTERNAL],
+  );
+  return rows.map((r) => ({
+    week: r.week,
+    gini: gini(r.worths.map(Number)),
+  }));
+}
+
+/**
+ * Cross-domain correlations via corr(), the spec's party trick. r is
+ * null when there's no variance or fewer than two pairs; every caller
+ * must print the small-n caveat — at friend scale these are vibes with
+ * confidence intervals wider than the chart.
+ */
+export async function correlations(guildId) {
+  // Wordle solve rate vs current worth (players with ≥3 boards).
+  const { rows: wordle } = await query(
+    `WITH worth AS (
+       SELECT user_id,
+              (SUM(amount) FILTER (WHERE NOT (type = ANY($3))))::bigint AS w
+       FROM transactions WHERE guild_id = $1 AND user_id ~ $2
+       GROUP BY user_id
+     ),
+     solver AS (
+       SELECT user_id, AVG(CASE WHEN solved THEN 1.0 ELSE 0.0 END)::float8 AS rate
+       FROM wordle_games WHERE guild_id = $1
+       GROUP BY user_id
+       HAVING COUNT(*) >= 3
+     )
+     SELECT corr(worth.w::float8, solver.rate) AS r, COUNT(*)::int AS n
+     FROM worth JOIN solver ON solver.user_id = worth.user_id`,
+    [guildId, HUMAN_ID, INTERNAL],
+  );
+
+  // Live daily streak vs lifetime gambling net ("disciplined people
+  // gamble better — discuss").
+  const { rows: streak } = await query(
+    `WITH net AS (
+       SELECT user_id, SUM(amount)::bigint AS net
+       FROM transactions
+       WHERE guild_id = $1 AND type = ANY($2)
+       GROUP BY user_id
+     )
+     SELECT corr(s.streak::float8, net.net::float8) AS r, COUNT(*)::int AS n
+     FROM daily_streaks s
+     JOIN net ON net.user_id = s.user_id
+     WHERE s.guild_id = $1`,
+    [guildId, GAMBLE],
+  );
+
+  return {
+    wordleVsWorth: { r: wordle[0].r, n: wordle[0].n },
+    streakVsGambling: { r: streak[0].r, n: streak[0].n },
+  };
+}
+
+/**
+ * Hoarding gap: for every spend, how long since that user last earned —
+ * averaged. An honest approximation of "how long do monies sit" without
+ * pretending we can FIFO-match individual coins. Bank shuffles excluded.
+ */
+export async function hoardingGap(guildId) {
+  const { rows } = await query(
+    `SELECT AVG(EXTRACT(EPOCH FROM (created_at - prev_earn)) / 86400.0)::float8 AS days,
+            COUNT(*)::int AS n
+     FROM (
+       SELECT created_at, amount,
+              MAX(created_at) FILTER (WHERE amount > 0) OVER (
+                PARTITION BY user_id ORDER BY id
+                ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+              ) AS prev_earn
+       FROM transactions
+       WHERE guild_id = $1 AND user_id ~ $2 AND NOT (type = ANY($3))
+     ) x
+     WHERE amount < 0 AND prev_earn IS NOT NULL`,
+    [guildId, HUMAN_ID, INTERNAL],
+  );
+  return rows[0].n > 0 ? { days: rows[0].days, spends: rows[0].n } : null;
+}
+
+/**
+ * Sentinel forensics: the raffle jar's balance over time. It should
+ * saw-tooth up during entries and snap to 0 at every draw — this chart
+ * IS an audit visualization (a jar that drifts nonzero means a bug).
+ */
+export async function jarHistory(guildId) {
+  const { rows } = await query(
+    `SELECT day::text AS day, running::bigint AS balance FROM (
+       SELECT created_at::date AS day,
+              SUM(SUM(amount)) OVER (ORDER BY created_at::date) AS running
+       FROM transactions
+       WHERE guild_id = $1 AND user_id = $2
+       GROUP BY created_at::date
+     ) d ORDER BY day`,
+    [guildId, JAR_SENTINEL],
+  );
+  return rows.map((r) => ({ day: r.day, balance: Number(r.balance) }));
 }

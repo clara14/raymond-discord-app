@@ -1,19 +1,31 @@
 // ============================================================
-// economy.js (command) — The macro dashboard: money supply,
-// faucets vs sinks, velocity, inequality (gini), concentration,
-// and the house report. Mod-gated like /audit. A thin renderer
-// over database/analytics.js — the queries are the product.
+// economy.js (command) — The macroeconomic suite (mod-gated):
+//   report   — supply, flows, velocity, inequality, house RTP
+//   insights — mobility, correlations, hoarding, jar forensics
+//   trend    — weekly gini + jar balance charts over history
+// Thin renderers over database/analytics.js — the queries are
+// the product.
 // ============================================================
 
-import { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder, PermissionFlagsBits } from 'discord.js';
-import { renderBarChart } from '../../lib/charts.js';
+import {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  AttachmentBuilder,
+  PermissionFlagsBits,
+} from 'discord.js';
 import {
   moneySupply,
   flowWindow,
   velocity,
   worthByUser,
   houseReport,
+  wealthMobility,
+  correlations,
+  hoardingGap,
+  weeklyGini,
+  jarHistory,
 } from '../../database/analytics.js';
+import { renderTimeSeries, renderBarChart } from '../../lib/charts.js';
 import { gini } from '../../lib/gini.js';
 import { mean, median } from '../../lib/stats.js';
 import { checkAchievements } from '../../database/achievements.js';
@@ -22,14 +34,37 @@ import { formatCurrency } from '../../config.js';
 
 export const data = new SlashCommandBuilder()
   .setName('economy')
-  .setDescription('The server\'s macroeconomic dashboard (moderators only).')
+  .setDescription('The server\'s macroeconomic dashboards (moderators only).')
+  .addSubcommand((sc) =>
+    sc.setName('report').setDescription('Supply, flows, inequality, and the house report.'),
+  )
+  .addSubcommand((sc) =>
+    sc.setName('insights').setDescription('Mobility, correlations, hoarding, and jar forensics.'),
+  )
+  .addSubcommand((sc) =>
+    sc.setName('trend').setDescription('Inequality and raffle-jar charts over the whole history.'),
+  )
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
 export async function execute(interaction) {
-  // Several aggregate passes over the whole ledger — defer past 3s.
+  // Every view runs aggregate passes over the whole ledger — defer.
   await interaction.deferReply();
-  const guildId = interaction.guildId;
 
+  const sub = interaction.options.getSubcommand();
+  if (sub === 'report') await showReport(interaction);
+  if (sub === 'insights') await showInsights(interaction);
+  if (sub === 'trend') await showTrend(interaction);
+
+  // The Concerned Economist checks ride the analytics trigger.
+  const earned = await checkAchievements(interaction.guildId, interaction.user.id, 'analytics', {
+    command: `economy ${sub}`,
+  });
+  await announceAchievements(interaction, earned);
+}
+
+// --- /economy report (the original dashboard) ---
+async function showReport(interaction) {
+  const guildId = interaction.guildId;
   const [supply, flow7, flow30, velo, worths, house] = await Promise.all([
     moneySupply(guildId),
     flowWindow(guildId, 7),
@@ -94,8 +129,8 @@ export async function execute(interaction) {
       },
     );
 
-  // Minted vs burned as a bar chart — the health metric at a glance.
-  // Numbers stay in the fields above, so a render failure costs nothing.
+  // Minted vs burned at a glance; numbers live above, so a rendering
+  // failure costs nothing.
   let files = [];
   try {
     const png = await renderBarChart('Money flow — minted vs burned', [
@@ -113,10 +148,135 @@ export async function execute(interaction) {
   }
 
   await interaction.editReply({ embeds: [embed], files });
+}
 
-  // The Concerned Economist checks ride the analytics trigger.
-  const earned = await checkAchievements(guildId, interaction.user.id, 'analytics', {
-    command: 'economy',
-  });
-  await announceAchievements(interaction, earned);
+// --- /economy insights (the fancy stats) ---
+async function showInsights(interaction) {
+  const guildId = interaction.guildId;
+  const [mobility, corr, hoard, supply] = await Promise.all([
+    wealthMobility(guildId, 30),
+    correlations(guildId),
+    hoardingGap(guildId),
+    moneySupply(guildId),
+  ]);
+
+  // Biggest climber/faller by rank shift, deltas as tiebreaker.
+  const movers = [...mobility].sort(
+    (a, b) => b.rankShift - a.rankShift || b.delta - a.delta,
+  );
+  const climber = movers[0];
+  const faller = movers[movers.length - 1];
+  const moverLine = (m, arrow) =>
+    m
+      ? `${arrow} <@${m.userId}> — #${m.rankThen} → #${m.rankNow} ` +
+        `(${m.delta >= 0 ? '+' : '−'}${Math.abs(m.delta).toLocaleString()} in 30d)`
+      : 'Not enough history yet.';
+
+  // Correlations always ship with the small-n honesty clause.
+  const rLine = (label, c) =>
+    c.r == null
+      ? `${label}: not enough data`
+      : `${label}: r = **${c.r.toFixed(2)}** (n = ${c.n} — tiny sample, vibes only)`;
+
+  const embed = new EmbedBuilder()
+    .setColor(0xf1c40f)
+    .setTitle(`🔬 ${interaction.guild.name} — economic insights`)
+    .addFields(
+      {
+        name: 'Wealth mobility (30d)',
+        value:
+          mobility.length >= 2
+            ? `${moverLine(climber, '📈 Climber:')}\n${moverLine(faller, '📉 Faller:')}`
+            : 'Not enough members with history yet.',
+      },
+      {
+        name: 'Correlations',
+        value:
+          `${rLine('Wordle solve rate ↔ worth', corr.wordleVsWorth)}\n` +
+          `${rLine('Daily streak ↔ gambling net', corr.streakVsGambling)}`,
+      },
+      {
+        name: 'Hoarding',
+        value: hoard
+          ? `Monies sit **~${hoard.days.toFixed(1)} days** between an earn and the next spend (${hoard.spends} spends measured).`
+          : 'Nobody has spent anything yet. Impressive restraint.',
+      },
+      {
+        name: 'Raffle jar forensics',
+        value:
+          `Currently holds **${formatCurrency(supply.jar)}**` +
+          (supply.jar === 0
+            ? ' — exactly 0 between rounds, as the audit gods intended.'
+            : ' — a round is open (or something is wrong; see /economy trend).'),
+      },
+    );
+
+  await interaction.editReply({ embeds: [embed] });
+}
+
+// --- /economy trend (charts over the whole history) ---
+async function showTrend(interaction) {
+  const guildId = interaction.guildId;
+  const [giniWeeks, jar] = await Promise.all([weeklyGini(guildId), jarHistory(guildId)]);
+
+  if (giniWeeks.length === 0) {
+    await interaction.editReply('No history yet — trends need time.');
+    return;
+  }
+
+  const embeds = [];
+  const files = [];
+
+  try {
+    // Gini plotted ×100: the chart's integer axis labels would render
+    // a 0..1 series as all-zeros.
+    const giniPng = await renderTimeSeries('Inequality over time (gini × 100)', [
+      {
+        label: 'gini ×100',
+        points: giniWeeks.map((w) => ({ day: w.week, value: Math.round(w.gini * 100) })),
+      },
+    ]);
+    if (giniPng) {
+      files.push(new AttachmentBuilder(giniPng, { name: 'gini.png' }));
+      embeds.push(
+        new EmbedBuilder()
+          .setColor(0xf1c40f)
+          .setTitle('📈 Is this getting worse?')
+          .setDescription(
+            `Weekly gini, all time. Now: **${giniWeeks[giniWeeks.length - 1].gini.toFixed(2)}**.`,
+          )
+          .setImage('attachment://gini.png'),
+      );
+    }
+
+    const jarPng =
+      jar.length > 0
+        ? await renderTimeSeries('Raffle jar balance (audit view)', [
+            { label: 'jar', points: jar.map((j) => ({ day: j.day, value: j.balance })) },
+          ])
+        : null;
+    if (jarPng) {
+      files.push(new AttachmentBuilder(jarPng, { name: 'jar.png' }));
+      embeds.push(
+        new EmbedBuilder()
+          .setColor(0x95a5a6)
+          .setTitle('🫙 Jar forensics')
+          .setDescription('Should saw-tooth up with entries and snap to 0 at every draw.')
+          .setImage('attachment://jar.png'),
+      );
+    }
+  } catch (err) {
+    console.error('Trend chart render failed:', err.message);
+  }
+
+  if (embeds.length === 0) {
+    // Chartless fallback: at least say the number.
+    await interaction.editReply(
+      `Current gini: **${giniWeeks[giniWeeks.length - 1].gini.toFixed(2)}** ` +
+        '(charts unavailable right now).',
+    );
+    return;
+  }
+
+  await interaction.editReply({ embeds, files });
 }
