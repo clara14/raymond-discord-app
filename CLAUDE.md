@@ -118,8 +118,11 @@ remindme
 Analytics: src/database/analytics.js is the product, commands are thin
 renderers; ledger types are classified by src/lib/ledgerTypes.js (the
 contract test is exhaustive both directions — new ledger types MUST
-register there and in test/analytics.test.js). Charts are v1 Unicode
-sparklines; canvas image tier deliberately deferred.
+register there and in test/analytics.test.js). Charts: PNG via
+src/lib/charts.js (@napi-rs/canvas; EXACTLY two functions, time series
++ bar — resist a framework) with sparkline fallback when rendering
+fails. Wealth/compare/economy attach charts; single-series charts get
+area fill, multi-series stay lines-only (overlap turns to mud).
 
 Reminders: a durable job queue — the reminders table IS the state;
 30s poller claims due rows FOR UPDATE SKIP LOCKED, DM fallback, marks

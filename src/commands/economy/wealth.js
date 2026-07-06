@@ -5,8 +5,9 @@
 // the running-SUM window query in analytics.js.
 // ============================================================
 
-import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder, MessageFlags } from 'discord.js';
 import { worthHistory, worthByUser } from '../../database/analytics.js';
+import { renderTimeSeries } from '../../lib/charts.js';
 import { sparkline } from '../../lib/sparkline.js';
 import { percentileRank } from '../../lib/stats.js';
 import { ensureWelcomeBonus } from '../../database/economy.js';
@@ -67,10 +68,6 @@ export async function execute(interaction) {
     .setColor(0xf1c40f)
     .setAuthor({ name: target.tag, iconURL: target.displayAvatarURL() })
     .setTitle(`📈 Wealth history${days ? ` — last ${days} days` : ''}`)
-    .setDescription(
-      `\`${sparkline(worths)}\`\n` +
-        `${history[0].day} → ${history[history.length - 1].day}`,
-    )
     .addFields(
       { name: 'Now', value: `**${formatCurrency(current)}**`, inline: true },
       {
@@ -89,5 +86,25 @@ export async function execute(interaction) {
       },
     );
 
-  await interaction.editReply({ embeds: [embed] });
+  // The chart: a real PNG when canvas cooperates, the trusty sparkline
+  // when it doesn't. A rendering failure must never kill the command.
+  let files = [];
+  try {
+    const png = await renderTimeSeries(`${target.username} — net worth`, [
+      { label: target.username, points: history.map((h) => ({ day: h.day, value: h.worth })) },
+    ]);
+    if (png) {
+      files = [new AttachmentBuilder(png, { name: 'wealth.png' })];
+      embed.setImage('attachment://wealth.png');
+    }
+  } catch (err) {
+    console.error('Wealth chart render failed (falling back to sparkline):', err.message);
+  }
+  if (files.length === 0) {
+    embed.setDescription(
+      `\`${sparkline(worths)}\`\n${history[0].day} → ${history[history.length - 1].day}`,
+    );
+  }
+
+  await interaction.editReply({ embeds: [embed], files });
 }

@@ -4,9 +4,10 @@
 // fuel, assembled entirely from analytics.js reads.
 // ============================================================
 
-import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder, MessageFlags } from 'discord.js';
 import { worthHistory, personalReport } from '../../database/analytics.js';
 import { getCurrentStreak } from '../../database/stats.js';
+import { renderTimeSeries } from '../../lib/charts.js';
 import { sparkline } from '../../lib/sparkline.js';
 import { ensureWelcomeBonus } from '../../database/economy.js';
 import { formatCurrency } from '../../config.js';
@@ -52,10 +53,25 @@ export async function execute(interaction) {
   const gamblingNet = (rep) =>
     Object.values(rep.gamblingRoi).reduce((sum, g) => sum + g.net, 0);
 
-  // One block per contender: sparkline + the numbers underneath.
+  // Both histories on ONE chart — the whole point of a head-to-head.
+  // Sparklines return per-block if the render fails.
+  let files = [];
+  try {
+    const png = await renderTimeSeries(`${a.username} vs ${b.username} — net worth`, [
+      { label: a.username, points: histA.map((h) => ({ day: h.day, value: h.worth })) },
+      { label: b.username, points: histB.map((h) => ({ day: h.day, value: h.worth })) },
+    ]);
+    if (png) files = [new AttachmentBuilder(png, { name: 'compare.png' })];
+  } catch (err) {
+    console.error('Compare chart render failed (falling back to sparklines):', err.message);
+  }
+  const withChart = files.length > 0;
+
+  // One block per contender; the sparkline line only appears when the
+  // image chart didn't make it.
   const block = (user, hist, rep, streak) =>
     `**${user.username}**\n` +
-    `\`${sparkline(hist.map((h) => h.worth))}\`\n` +
+    (withChart ? '' : `\`${sparkline(hist.map((h) => h.worth))}\`\n`) +
     `Worth: **${formatCurrency(worthNow(hist))}** · ` +
     `Daily streak: ${streak > 0 ? `🔥 ${streak}d` : 'none'} · ` +
     `Gambling: ${gamblingNet(rep) >= 0 ? 'up' : 'down'} ${formatCurrency(Math.abs(gamblingNet(rep)))} · ` +
@@ -73,6 +89,7 @@ export async function execute(interaction) {
     .setDescription(
       `${block(a, histA, repA, streakA)}\n\n${block(b, histB, repB, streakB)}\n\n${verdict}`,
     );
+  if (withChart) embed.setImage('attachment://compare.png');
 
-  await interaction.editReply({ embeds: [embed] });
+  await interaction.editReply({ embeds: [embed], files });
 }

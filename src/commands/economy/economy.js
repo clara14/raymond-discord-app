@@ -5,7 +5,8 @@
 // over database/analytics.js — the queries are the product.
 // ============================================================
 
-import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder, PermissionFlagsBits } from 'discord.js';
+import { renderBarChart } from '../../lib/charts.js';
 import {
   moneySupply,
   flowWindow,
@@ -93,7 +94,25 @@ export async function execute(interaction) {
       },
     );
 
-  await interaction.editReply({ embeds: [embed] });
+  // Minted vs burned as a bar chart — the health metric at a glance.
+  // Numbers stay in the fields above, so a render failure costs nothing.
+  let files = [];
+  try {
+    const png = await renderBarChart('Money flow — minted vs burned', [
+      { label: 'Minted (7d)', value: flow7.minted, color: '#2ecc71' },
+      { label: 'Burned (7d)', value: flow7.burned, color: '#e74c3c' },
+      { label: 'Minted (30d)', value: flow30.minted, color: '#2ecc71' },
+      { label: 'Burned (30d)', value: flow30.burned, color: '#e74c3c' },
+    ]);
+    if (png) {
+      files = [new AttachmentBuilder(png, { name: 'flow.png' })];
+      embed.setImage('attachment://flow.png');
+    }
+  } catch (err) {
+    console.error('Economy chart render failed:', err.message);
+  }
+
+  await interaction.editReply({ embeds: [embed], files });
 
   // The Concerned Economist checks ride the analytics trigger.
   const earned = await checkAchievements(guildId, interaction.user.id, 'analytics', {

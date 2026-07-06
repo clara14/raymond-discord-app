@@ -1,16 +1,16 @@
 # Economy Analytics + Wealth Time Machine — Design Spec
 
-> **Status:** Phases 1–2 shipped 2026-07-04 — analytics.js, all five
-> commands (/economy /wealth /records /mystats /compare) on the v1
-> sparkline tier, gini + stats helpers + classifyType contract test
-> (with a fifth 'gamble' class: sign decides mint vs burn), and all
-> three achievements. Phase 3 (@napi-rs/canvas image charts — a new
-> native dependency, ask first) and phase 4 (AI chat tool, mobility,
-> correlations) pending. Notes: streak records are "on record" (current
-> tables), not all-time (broken streaks leave no trace); SQL is
+> **Status:** Phases 1–3 shipped 2026-07-04. Phase 3 adds
+> @napi-rs/canvas PNG charts via lib/charts.js (exactly two functions:
+> time series + bar): /wealth gets an area chart, /compare a two-line
+> head-to-head, /economy a minted-vs-burned bar chart — every command
+> keeps its sparkline/numbers fallback if rendering ever fails, and
+> chart output is test-verified (PNG signature + dimensions) AND
+> visually verified locally. Phase 4 (AI chat tool, mobility,
+> correlations, risk profile) pending. Notes: streak records are "on
+> record" (current tables), not all-time; analytics SQL is
 > hand-verified — no test database exists, the pure math is what's
-> unit-tested; risk profile (bet as % of balance-at-bet) deferred with
-> phase 4's window-function work.
+> unit-tested.
 
 Goal: turn the append-only ledger into insight. Every monies movement
 since day one is already recorded and hash-chained; this feature is
