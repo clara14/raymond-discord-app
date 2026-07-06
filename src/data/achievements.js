@@ -59,6 +59,7 @@ export const TRIGGERS = new Set([
   'birthday',   // the daily job celebrated this user (event: year)
   'reminder',   // /remindme in succeeded (event: durationSec)
   'reminder_delivered', // the scheduler delivered one of this user's reminders
+  'analytics',  // /economy or /mystats ran (event: command)
   'meta',       // fired by the runner itself after any award (completionists)
 ]);
 
@@ -542,6 +543,18 @@ export const ACHIEVEMENTS = [
       event
         ? (event.durationSec ?? 0) >= 180 * 86_400
         : queries.hasLongReminder(180) },
+  { id: 'gini_watcher', name: 'Concerned Economist', emoji: '🧐', tier: 'common', secret: true,
+    // Moment-only: running a dashboard leaves no database trace.
+    description: 'Check the economic dashboards (/economy or /mystats).',
+    triggers: ['analytics'], check: ({ event }) => event != null },
+  { id: 'all_time_high', name: 'Peak Performance', emoji: '📈', tier: 'uncommon', secret: false,
+    description: 'Hit a new personal all-time-high worth of 5,000+.',
+    triggers: ['daily', 'work', 'coinflip', 'slots', 'blackjack', 'raffle_win', 'lolbet'],
+    check: async ({ queries }) => queries.isAtAllTimeHigh(5_000) },
+  { id: 'records_holder', name: 'Record Breaker', emoji: '📜', tier: 'rare', secret: false,
+    description: 'Hold any entry in the /records hall of records.',
+    triggers: ['analytics'],
+    check: async ({ queries }) => queries.holdsAnyRecord() },
   { id: 'completionist_25', name: 'Trophy Hunter', emoji: '🏆', tier: 'epic', secret: false,
     description: 'Earn 25 achievements.',
     triggers: ['meta'], check: achievementsAtLeast(25) },

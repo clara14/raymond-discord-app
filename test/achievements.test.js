@@ -316,6 +316,13 @@ const CASES = [
   ['reminder_year', { event: { durationSec: 180 * 86_400 } }, true],
   ['reminder_year', { event: { durationSec: 180 * 86_400 - 1 } }, false],
 
+  // Analytics.
+  ['gini_watcher', { event: { command: 'economy' } }, true],
+  ['all_time_high', { queries: { isAtAllTimeHigh: async (min) => min === 5_000 } }, true],
+  ['all_time_high', { queries: { isAtAllTimeHigh: async () => false } }, false],
+  ['records_holder', { queries: { holdsAnyRecord: async () => true } }, true],
+  ['records_holder', { queries: { holdsAnyRecord: async () => false } }, false],
+
   // Meta & social.
   ['facts_about_you_5', { queries: { countFactsAboutMe: async () => 5 } }, true],
   ['facts_about_you_5', { queries: { countFactsAboutMe: async () => 4 } }, false],
@@ -384,6 +391,9 @@ const SWEEP_CASES = [
   ['birthday_generous',   {}, false], // moment-only: sweep must never grant it
   ['first_reminder',  { hasReminderEver: async () => true }, true],
   ['reminder_year',   { hasLongReminder: async (d) => d === 180 }, true],
+  ['gini_watcher',    {}, false], // moment-only: sweep must never grant it
+  ['all_time_high',   { isAtAllTimeHigh: async () => true }, true],
+  ['records_holder',  { holdsAnyRecord: async () => true }, true],
 ];
 
 test('every catalog check answers its fixtures correctly', async () => {
@@ -458,6 +468,8 @@ const BLANK_USER_QUERIES = {
   hasReminderEver: async () => false,
   countDeliveredReminders: async () => 0,
   hasLongReminder: async () => false,
+  isAtAllTimeHigh: async () => false,
+  holdsAnyRecord: async () => false,
 };
 
 test('SWEEP SAFETY: a blank user earns NOTHING from a null-event pass', async () => {

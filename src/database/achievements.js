@@ -9,6 +9,7 @@
 import { pool, query } from './db.js';
 import { ledgerBalance } from './tx.js';
 import { bankedBalance } from './bank.js';
+import { records } from './analytics.js';
 import { isCelebrationDay } from '../lib/birthdays.js';
 import { ACHIEVEMENTS } from '../data/achievements.js';
 
@@ -569,6 +570,41 @@ export function makeQueries(guildId, userId) {
         [guildId, userId, days],
       );
       return rows[0].yes;
+    },
+
+    /**
+     * Is the user AT their all-time-high worth right now, and is it at
+     * least `minWorth`? Peak = max over the daily running-worth closes
+     * (bank moves excluded — they don't change worth); "at the high"
+     * means current worth equals that peak.
+     */
+    isAtAllTimeHigh: async (minWorth) => {
+      const { rows } = await query(
+        `SELECT COALESCE(MAX(running), 0)::bigint AS peak FROM (
+           SELECT SUM(SUM(amount)) OVER (ORDER BY created_at::date) AS running
+           FROM transactions
+           WHERE guild_id = $1 AND user_id = $2
+             AND type NOT IN ('bank_deposit', 'bank_withdraw')
+           GROUP BY created_at::date
+         ) daily`,
+        [guildId, userId],
+      );
+      const peak = Number(rows[0].peak);
+      const current =
+        (await ledgerBalance(pool, guildId, userId)) +
+        (await bankedBalance(pool, guildId, userId));
+      return current >= minWorth && current >= peak;
+    },
+
+    /** Does the user hold ANY superlative in the hall of records? */
+    holdsAnyRecord: async () => {
+      const r = await records(guildId);
+      const holders = [
+        r.biggestWin?.userId, r.biggestLoss?.userId, r.biggestPay?.userId,
+        r.biggestGift?.userId, r.biggestRob?.userId, r.biggestDamages?.userId,
+        r.biggestRafflePot?.userId, r.mostGarnished?.userId,
+      ];
+      return holders.includes(userId);
     },
 
     /** Any warning on record (the sweep path for 'warned'). */

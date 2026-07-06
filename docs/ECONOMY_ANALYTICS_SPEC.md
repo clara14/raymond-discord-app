@@ -1,5 +1,17 @@
 # Economy Analytics + Wealth Time Machine — Design Spec
 
+> **Status:** Phases 1–2 shipped 2026-07-04 — analytics.js, all five
+> commands (/economy /wealth /records /mystats /compare) on the v1
+> sparkline tier, gini + stats helpers + classifyType contract test
+> (with a fifth 'gamble' class: sign decides mint vs burn), and all
+> three achievements. Phase 3 (@napi-rs/canvas image charts — a new
+> native dependency, ask first) and phase 4 (AI chat tool, mobility,
+> correlations) pending. Notes: streak records are "on record" (current
+> tables), not all-time (broken streaks leave no trace); SQL is
+> hand-verified — no test database exists, the pure math is what's
+> unit-tested; risk profile (bet as % of balance-at-bet) deferred with
+> phase 4's window-function work.
+
 Goal: turn the append-only ledger into insight. Every monies movement
 since day one is already recorded and hash-chained; this feature is
 almost pure SQL — window functions, FILTER aggregates, percentiles,

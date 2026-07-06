@@ -15,7 +15,7 @@ Check items off as they're built; add new ideas at will.
 - [ ] Heist group event: buy-in window, all-or-nothing group payout (best hype generator)
 - [ ] Streak freezes & purchasable insurance (vs /rob, vs missed dailies)
 - [ ] Fake volatile stock market: /invest, random-walk prices, daily ticker ritual
-- [ ] Admin /economy dashboard: money supply & inflation (one ledger query away)
+- [x] Admin /economy dashboard: money supply & inflation (+ /wealth, /records, /mystats, /compare)
 - [ ] Nickname ransom / paid mischief (rename someone for an hour; victim pays to undo)
 
 ## Games

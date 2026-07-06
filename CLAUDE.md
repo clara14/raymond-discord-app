@@ -106,13 +106,20 @@ sessions in Claude chat; this file transfers that accumulated knowledge.
 - The AI chat's tools resolve usernames via a per-conversation nameMap;
   chat_messages.user_id exists for this.
 
-## Current state (29 commands)
+## Current state (34 commands)
 
-economy: audit (mod-gated), balance, bank, bribe, daily, gift, leaderboard,
-loan, pay, profile, raffle, rob, work · games: blackjack, coinflip, slots,
-wordle · lol: history, link, lolchannel, lolstats · moderation: warn ·
-utility: achievements, announcechannel (mod-gated), birthday, fact, ping,
-poll, remindme
+economy: audit (mod-gated), balance, bank, bribe, compare, daily, economy
+(mod-gated), gift, leaderboard, loan, mystats, pay, profile, raffle,
+records, rob, wealth, work · games: blackjack, coinflip, slots, wordle ·
+lol: history, link, lolchannel, lolstats · moderation: warn · utility:
+achievements, announcechannel (mod-gated), birthday, fact, ping, poll,
+remindme
+
+Analytics: src/database/analytics.js is the product, commands are thin
+renderers; ledger types are classified by src/lib/ledgerTypes.js (the
+contract test is exhaustive both directions — new ledger types MUST
+register there and in test/analytics.test.js). Charts are v1 Unicode
+sparklines; canvas image tier deliberately deferred.
 
 Reminders: a durable job queue — the reminders table IS the state;
 30s poller claims due rows FOR UPDATE SKIP LOCKED, DM fallback, marks
