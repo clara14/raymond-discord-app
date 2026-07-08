@@ -101,7 +101,7 @@ async function showReport(interaction) {
         name: 'Money supply',
         value:
           `Total: **${formatCurrency(supply.total)}**\n` +
-          `Wallets: ${formatCurrency(supply.wallets - supply.banked)} · ` +
+          `Wallets: ${formatCurrency(supply.wallets)} · ` +
           `Banked: ${formatCurrency(supply.banked)} · ` +
           `Raffle jar: ${formatCurrency(supply.jar)}`,
       },

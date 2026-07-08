@@ -44,13 +44,15 @@ export async function moneySupply(guildId) {
     [guildId, HUMAN_ID, INTERNAL],
   );
   const r = rows[0];
-  const wallets = Number(r.human_sum) + Number(r.banked); // un-subtract bank rows
-  return {
-    wallets,
-    banked: Number(r.banked),
-    jar: Number(r.jar),
-    total: wallets /* already includes banked */ + Number(r.jar),
-  };
+  // human_sum is Σ over every human ledger row. By the wallet = Σ(rows)
+  // invariant — and because a bank deposit is a single negative wallet
+  // row — that sum IS the total LIQUID wallet money: the deposits have
+  // already subtracted themselves out. banked re-derives what's parked
+  // in the bank. The three buckets are disjoint and sum to the supply.
+  const wallets = Number(r.human_sum);
+  const banked = Number(r.banked);
+  const jar = Number(r.jar);
+  return { wallets, banked, jar, total: wallets + banked + jar };
 }
 
 /**
